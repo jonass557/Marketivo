@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  password         String
+  fullName         String
+  role             Role      @default(USER)
+  address          String?
+  phone            String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  orders           Order[]
+  reviews          Review[]
+  adminRequests    AdminRequest[]
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  image       String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id           String    @id @default(uuid())
+  name         String
+  slug         String    @unique
+  description  String
+  price        Float     // Prix actuel en XAF
+  oldPrice     Float?    // Ancien prix (barré)
+  brand        String?   // Marque
+  size         String?   // Taille
+  stock        Int       @default(0)
+  images       String[]
+  categoryId   String
+  category     Category  @relation(fields: [categoryId], references: [id])
+  isPopular    Boolean   @default(false)
+  isAffiliate  Boolean   @default(false) // Produit d'affiliation
+  affiliateUrl String?   // URL vers le site affilié (Amazon, Jumia, etc.)
+  reviews      Review[]
+  orderItems   OrderItem[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  totalAmount     Float       // Total en XAF
+  status          OrderStatus @default(PENDING)
+  paymentMethod   String      @default("cod") // cod, momo, om, stripe, paypal, cinetpay
+  items           OrderItem[]
+  shippingAddress String
+  city            String?
+  phone           String?
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float   // Prix unitaire au moment de la commande
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int
+  comment   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Banner {
+  id        String   @id @default(uuid())
+  title     String?
+  imageUrl  String
+  link      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdminRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BlockCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  blocks    Block[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Block {
+  id              String        @id @default(uuid())
+  title           String
+  content         String
+  imageUrl        String?
+  blockCategoryId String
+  blockCategory   BlockCategory @relation(fields: [blockCategoryId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Blog {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  excerpt     String
+  content     String
+  imageUrl    String?
+  author      String   @default("Admin")
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // ORDER, REVIEW, USER, etc.
+  title     String
+  message   String
+  orderId   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id                    String   @id @default("main")
+  
+  // Boutique
+  storeName             String   @default("MyShop")
+  storeLogo             String?  // URL du logo
+  storeDescription      String?
+  storeEmail            String?
+  storePhone            String?
+  storeAddress          String?
+  
+  // Devise
+  currency              String   @default("XAF")
+  currencySymbol        String   @default("FCFA")
+  currencyPosition      String   @default("after") // before ou after
+  
+  // Notifications Admin
+  adminEmail            String?
+  adminWhatsApp         String?
+  orderNotifications    Boolean  @default(true)
+  stockAlerts           Boolean  @default(true)
+  
+  // Thème
+  primaryColor          String   @default("#f97316") // Orange
+  secondaryColor        String   @default("#1f2937") // Gray dark
+  accentColor           String   @default("#10b981") // Green
+  
+  // Livraison
+  enableShipping        Boolean  @default(true)
+  freeShippingThreshold Int      @default(50000)
+  defaultShippingFee    Int      @default(2500)
+  estimatedDelivery     String   @default("24-48h")
+  
+  // Paiement local
+  enableMobileMoney     Boolean  @default(false)
+  enableOrangeMoney     Boolean  @default(false)
+  enableCashOnDelivery  Boolean  @default(false)
+  
+  // Stripe
+  enableStripe          Boolean  @default(false)
+  stripePublicKey       String?
+  stripeSecretKey       String?
+  stripeWebhookSecret   String?
+  
+  // PayPal
+  enablePaypal          Boolean  @default(false)
+  paypalClientId        String?
+  paypalClientSecret    String?
+  paypalMode            String   @default("sandbox") // sandbox ou live
+  
+  // CinetPay
+  enableCinetpay        Boolean  @default(false)
+  cinetpayApiKey        String?
+  cinetpaySiteId        String?
+  cinetpaySecretKey     String?
+  cinetpayMode          String   @default("test") // test ou live
+  
+  // SEO
+  metaTitle             String?
+  metaDescription       String?
+  
+  // Footer
+  footerEmail           String?
+  footerPhone           String?
+  footerAddress         String?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
