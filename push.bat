@@ -1,6 +1,6 @@
 @echo off
 echo ====================================
-echo    MyShop - Push vers GitHub
+echo    Marketivo - Push vers GitHub
 echo ====================================
 echo.
 
