@@ -341,6 +341,267 @@ const checkCinetPayStatus = asyncHandler(async (req, res) => {
 });
 
 // ============================================
+// IKEEPAY INTEGRATION (Mobile Money H2H)
+// https://api.ikeepay.com
+// ============================================
+
+// @desc    Initiate iKeepay payin (encaissement)
+// @route   POST /api/payments/ikeepay/payin
+// @access  Private
+const initiateIkeepayPayment = asyncHandler(async (req, res) => {
+  const {
+    orderId,
+    amount,
+    currency,
+    country,
+    phoneNumber,
+    operator,
+    otp
+  } = req.body;
+
+  if (!orderId || !phoneNumber || !operator) {
+    res.status(400);
+    throw new Error('Champs requis manquants (orderId, phoneNumber, operator)');
+  }
+
+  const settings = await Settings.findById('main');
+  if (!settings?.enableIkeepay || !settings?.ikeepaySecretKey) {
+    res.status(400);
+    throw new Error('Le paiement iKeepay Mobile Money n\'est pas activé ou configuré par l\'administrateur');
+  }
+
+  const order = await Order.findById(orderId).populate('user', 'email fullName');
+  if (!order) {
+    res.status(404);
+    throw new Error('Commande non trouvée');
+  }
+
+  // Nettoyage et formatage
+  const cleanPhone = String(phoneNumber).replace(/[^0-9]/g, '');
+  const cleanOperator = String(operator).toUpperCase().trim();
+  const cleanCountry = (country || 'CI').toUpperCase().trim();
+  const payCurrency = (currency || settings.currency || 'XOF').toUpperCase().trim();
+  const payAmount = Number(amount || order.totalAmount);
+  
+  // Référence unique de transaction
+  const externalReference = `REF_${Date.now()}_${order._id.toString().slice(-6)}`;
+
+  const payload = {
+    amount: payAmount,
+    currency: payCurrency,
+    country: cleanCountry,
+    phoneNumber: cleanPhone,
+    operator: cleanOperator,
+    external_reference: externalReference,
+    customer_email: req.user?.email || order.user?.email || 'customer@marketivo.com'
+  };
+
+  if (otp && String(otp).trim()) {
+    payload.otp = String(otp).trim();
+  }
+
+  try {
+    const response = await axios.post('https://api.ikeepay.com/h2h-payin', payload, {
+      headers: {
+        'x-api-key': settings.ikeepaySecretKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    const responseData = response.data;
+
+    // Enregistrer la référence dans la commande
+    order.paymentMethod = 'ikeepay';
+    order.paymentReference = externalReference;
+    if (responseData?.data?.provider_reference) {
+      order.providerReference = responseData.data.provider_reference;
+    }
+    await order.save();
+
+    res.json({
+      success: true,
+      external_reference: externalReference,
+      payment_link: responseData?.payment_link || responseData?.data?.payment_link || null,
+      message: responseData?.message || 'Demande de paiement envoyée avec succès',
+      data: responseData
+    });
+  } catch (error) {
+    console.error('Erreur iKeepay Payin:', error.response?.data || error.message);
+    const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Échec de l\'initialisation iKeepay';
+    res.status(error.response?.status || 500);
+    throw new Error(errorMsg);
+  }
+});
+
+// @desc    Verify iKeepay transaction
+// @route   GET /api/payments/ikeepay/verify/:reference
+// @access  Private
+const verifyIkeepayPayment = asyncHandler(async (req, res) => {
+  const { reference } = req.params;
+
+  const settings = await Settings.findById('main');
+  if (!settings?.enableIkeepay || !settings?.ikeepaySecretKey) {
+    res.status(400);
+    throw new Error('iKeepay n\'est pas configuré');
+  }
+
+  try {
+    const response = await axios.get(`https://api.ikeepay.com/h2h-verify/${encodeURIComponent(reference)}`, {
+      headers: {
+        'x-api-key': settings.ikeepaySecretKey
+      },
+      timeout: 15000
+    });
+
+    const result = response.data;
+    const txData = result?.data || result;
+    const txStatus = (txData?.status || '').toLowerCase();
+
+    // Retrouver la commande correspondante
+    let order = await Order.findOne({
+      $or: [
+        { paymentReference: reference },
+        { providerReference: reference }
+      ]
+    });
+
+    if (!order && reference.includes('_')) {
+      const parts = reference.split('_');
+      const suffix = parts[parts.length - 1];
+      if (suffix.length === 6) {
+        order = await Order.findOne({ _id: { $regex: suffix + '$' } });
+      }
+    }
+
+    if (order) {
+      if ((txStatus === 'completed' || txStatus === 'success') && order.paymentStatus !== 'PAID') {
+        order.paymentStatus = 'PAID';
+        order.status = 'CONFIRMED';
+        order.paymentMethod = 'ikeepay';
+        if (txData?.provider_reference) {
+          order.providerReference = txData.provider_reference;
+        }
+        await order.save();
+      } else if (txStatus === 'failed') {
+        order.paymentStatus = 'FAILED';
+        await order.save();
+      }
+    }
+
+    res.json({
+      success: true,
+      status: txStatus,
+      data: txData,
+      isPaid: txStatus === 'completed' || txStatus === 'success',
+      orderId: order?._id
+    });
+  } catch (error) {
+    console.error('Erreur iKeepay Verify:', error.response?.data || error.message);
+    const errorMsg = error.response?.data?.message || error.message || 'Erreur lors de la vérification iKeepay';
+    res.status(error.response?.status || 500);
+    throw new Error(errorMsg);
+  }
+});
+
+// @desc    Webhook for iKeepay async notifications
+// @route   POST /api/payments/ikeepay/webhook
+// @access  Public
+const ikeepayWebhook = asyncHandler(async (req, res) => {
+  console.log('🔔 Webhook iKeepay reçu:', JSON.stringify(req.body));
+  const { event, data } = req.body || {};
+
+  if (!data) {
+    return res.status(200).json({ received: true, ignored: true });
+  }
+
+  const {
+    type,
+    external_reference,
+    provider_reference,
+    status
+  } = data;
+
+  const normalizedStatus = (status || '').toLowerCase();
+
+  if (type === 'payin' && (normalizedStatus === 'completed' || normalizedStatus === 'success')) {
+    let order = await Order.findOne({
+      $or: [
+        { paymentReference: external_reference },
+        { providerReference: provider_reference }
+      ]
+    });
+
+    if (!order && external_reference && external_reference.includes('_')) {
+      const parts = external_reference.split('_');
+      const suffix = parts[parts.length - 1];
+      if (suffix.length === 6) {
+        order = await Order.findOne({ _id: { $regex: suffix + '$' } });
+      }
+    }
+
+    if (order) {
+      order.paymentStatus = 'PAID';
+      order.status = 'CONFIRMED';
+      order.paymentMethod = 'ikeepay';
+      if (provider_reference) {
+        order.providerReference = provider_reference;
+      }
+      await order.save();
+      console.log(`✅ Commande ${order._id} marquée comme PAYÉE via Webhook iKeepay`);
+    } else {
+      console.warn(`⚠️ Commande non trouvée pour la référence ${external_reference}`);
+    }
+  }
+
+  res.status(200).json({ received: true, status: 'ok' });
+});
+
+// @desc    Initiate iKeepay payout (retrait)
+// @route   POST /api/payments/ikeepay/payout
+// @access  Private
+const initiateIkeepayPayout = asyncHandler(async (req, res) => {
+  const { amount, currency, country, phoneNumber, operator, reference } = req.body;
+
+  const settings = await Settings.findById('main');
+  if (!settings?.enableIkeepay || !settings?.ikeepaySecretKey) {
+    res.status(400);
+    throw new Error('iKeepay n\'est pas configuré');
+  }
+
+  const externalReference = reference || `PAYOUT_${Date.now()}`;
+
+  const payload = {
+    amount: Number(amount),
+    currency: (currency || settings.currency || 'XOF').toUpperCase(),
+    country: (country || 'CI').toUpperCase(),
+    phoneNumber: String(phoneNumber).replace(/[^0-9]/g, ''),
+    operator: String(operator).toUpperCase(),
+    external_reference: externalReference
+  };
+
+  try {
+    const response = await axios.post('https://api.ikeepay.com/h2h-payout', payload, {
+      headers: {
+        'x-api-key': settings.ikeepaySecretKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    res.json({
+      success: true,
+      external_reference: externalReference,
+      data: response.data
+    });
+  } catch (error) {
+    console.error('Erreur iKeepay Payout:', error.response?.data || error.message);
+    res.status(error.response?.status || 500);
+    throw new Error(error.response?.data?.message || error.message || 'Échec du retrait iKeepay');
+  }
+});
+
+// ============================================
 // GET AVAILABLE PAYMENT METHODS
 // ============================================
 
@@ -356,6 +617,17 @@ const getPaymentMethods = asyncHandler(async (req, res) => {
   }
 
   const methods = [];
+
+  // iKeepay Mobile Money (H2H multi-pays et multi-opérateurs)
+  if (settings?.enableIkeepay && settings?.ikeepaySecretKey) {
+    methods.push({ 
+      id: 'ikeepay', 
+      name: 'Mobile Money (Orange, MTN, Wave, Moov...)', 
+      icon: '📱', 
+      type: 'ikeepay',
+      description: 'Paiement direct sécurisé par Mobile Money (Côte d\'Ivoire, Sénégal, Cameroun, Burkina Faso...)'
+    });
+  }
 
   if (settings?.enableMobileMoney) {
     methods.push({ id: 'momo', name: 'MTN Mobile Money', icon: '📱', type: 'mobile' });
@@ -409,6 +681,11 @@ module.exports = {
   initializeCinetPayPayment,
   cinetPayNotify,
   checkCinetPayStatus,
+  // iKeepay
+  initiateIkeepayPayment,
+  verifyIkeepayPayment,
+  ikeepayWebhook,
+  initiateIkeepayPayout,
   // General
   getPaymentMethods
 };

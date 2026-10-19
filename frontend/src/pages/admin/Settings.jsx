@@ -1,6 +1,6 @@
-﻿import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Save, Store, Globe, CreditCard, Truck, Palette, Loader, DollarSign, MessageSquare, Check, Eye, EyeOff, ExternalLink, AlertCircle, Upload, Image, Plus, X } from 'lucide-react';
+import { Save, Store, Globe, CreditCard, Truck, Palette, Loader, DollarSign, MessageSquare, Check, Eye, EyeOff, ExternalLink, AlertCircle, Upload, Image, Plus, X, ShieldCheck, Lock, Copy, RefreshCw, Smartphone } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import AuthContext from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -20,6 +20,10 @@ const Settings = () => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showCustomCurrency, setShowCustomCurrency] = useState(false);
   const [customCurrency, setCustomCurrency] = useState({ code: '', symbol: '', name: '' });
+
+  // État spécifique pour le changement sécurisé de la clé secrète iKeepay
+  const [isChangingIkeepayKey, setIsChangingIkeepayKey] = useState(false);
+  const [newIkeepayKey, setNewIkeepayKey] = useState('');
 
   const [settings, setSettings] = useState({
     storeName: '',
@@ -61,6 +65,10 @@ const Settings = () => {
     cinetpaySiteId: '',
     cinetpaySecretKey: '',
     cinetpayMode: 'test',
+    // iKeepay Mobile Money (H2H)
+    enableIkeepay: false,
+    ikeepaySecretKey: '',
+    hasIkeepaySecretKey: false,
     // SEO
     metaTitle: '',
     metaDescription: '',
@@ -197,13 +205,25 @@ const Settings = () => {
     toast.success(`Devise ${newCurrency.code} ajoutée !`);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrideSettings = null) => {
     try {
       setSaving(true);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.put(`${API_URL}/api/settings`, settings, config);
+      
+      const payload = { ...(overrideSettings || settings) };
+      if (isChangingIkeepayKey && newIkeepayKey) {
+        payload.ikeepaySecretKey = newIkeepayKey.trim();
+      }
+
+      const { data } = await axios.put(`${API_URL}/api/settings`, payload, config);
       toast.success('Paramètres enregistrés avec succès !');
       
+      if (data?.settings) {
+        setSettings(prev => ({ ...prev, ...data.settings }));
+        setIsChangingIkeepayKey(false);
+        setNewIkeepayKey('');
+      }
+
       // Rafraîchir les paramètres globaux (devise, thème, etc.)
       refreshSettings();
     } catch (error) {
@@ -1051,6 +1071,173 @@ const Settings = () => {
                           <option value="live">🚀 Live (Production)</option>
                         </select>
                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* iKeepay Mobile Money (H2H) */}
+              <div className="bg-white rounded-xl shadow-sm p-6 space-y-4 border border-orange-100">
+                <div className="flex items-center justify-between border-b pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
+                      <Smartphone size={24} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-bold text-lg text-gray-900">iKeepay Mobile Money (H2H)</h2>
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full font-semibold">Direct & Sécurisé</span>
+                      </div>
+                      <p className="text-sm text-gray-500">Paiements directs Orange, MTN, Wave, Moov, Airtel, Mobicash...</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a href="https://ikeepay.com" target="_blank" rel="noopener noreferrer"
+                      className="text-orange-600 hover:text-orange-700 text-sm flex items-center gap-1 font-medium">
+                      Site iKeepay <ExternalLink size={14} />
+                    </a>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={settings.enableIkeepay}
+                        onChange={(e) => handleChange('enableIkeepay', e.target.checked)} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {settings.enableIkeepay && (
+                  <div className="space-y-4 pt-2">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                      <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
+                      <div className="text-sm text-amber-900 space-y-1">
+                        <p><strong>Intégration H2H iKeepay :</strong> Endpoint Live : <code className="bg-amber-100 px-1 py-0.5 rounded text-xs">https://api.ikeepay.com</code></p>
+                        <p className="text-xs text-amber-700">Encaissement automatique par Push USSD direct sur le mobile du client ou lien Wave/Orange.</p>
+                      </div>
+                    </div>
+
+                    {/* URL de Webhook pour iKeepay */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                        URL de Notification Webhook (à copier dans votre console iKeepay)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${API_URL}/api/payments/ikeepay/webhook`}
+                          className="w-full text-xs bg-white text-gray-700 font-mono px-3 py-2 border rounded select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${API_URL}/api/payments/ikeepay/webhook`);
+                            toast.success('URL Webhook copiée !');
+                          }}
+                          className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs flex items-center gap-1 font-medium whitespace-nowrap"
+                        >
+                          <Copy size={13} /> Copier
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Clé API Secrète - Sécurisée : modifiable / remplaçable uniquement, non copiable */}
+                    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Lock size={16} className="text-gray-600" />
+                          <label className="block text-sm font-semibold text-gray-800">
+                            Clé API Secrète (<span className="font-mono text-xs text-orange-600">x-api-key: SECRET_KEY</span>)
+                          </label>
+                        </div>
+                        {settings.hasIkeepaySecretKey && (
+                          <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+                            <ShieldCheck size={14} /> Clé active & protégée
+                          </span>
+                        )}
+                      </div>
+
+                      {settings.hasIkeepaySecretKey && !isChangingIkeepayKey ? (
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <input
+                              type="password"
+                              readOnly
+                              value="••••••••••••••••••••••••••••••••"
+                              onCopy={(e) => {
+                                e.preventDefault();
+                                toast.warning("Pour des raisons de sécurité, la clé secrète ne peut pas être copiée.");
+                              }}
+                              onContextMenu={(e) => e.preventDefault()}
+                              className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 font-mono select-none cursor-not-allowed"
+                            />
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+                              <Lock size={16} />
+                            </div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-500 pt-1">
+                            <p>🔒 Cette clé est protégée. Elle ne peut ni être visualisée ni copiée ; vous pouvez uniquement la remplacer.</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsChangingIkeepayKey(true);
+                                setNewIkeepayKey('');
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:text-orange-600 hover:border-orange-500 rounded-lg font-medium shadow-sm transition-colors whitespace-nowrap self-start sm:self-auto"
+                            >
+                              <RefreshCw size={12} /> Changer la clé API
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <input
+                              type="password"
+                              value={isChangingIkeepayKey ? newIkeepayKey : (settings.ikeepaySecretKey || '')}
+                              onChange={(e) => {
+                                if (isChangingIkeepayKey) {
+                                  setNewIkeepayKey(e.target.value);
+                                } else {
+                                  handleChange('ikeepaySecretKey', e.target.value);
+                                }
+                              }}
+                              placeholder="Collez ici votre clé secrète iKeepay (SECRET_KEY)..."
+                              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 font-mono text-sm bg-white"
+                              autoFocus={isChangingIkeepayKey}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              {isChangingIkeepayKey 
+                                ? '⚠️ Saisissez votre nouvelle clé API. Une fois enregistrée, elle remplacera l\'ancienne et sera immédiatement verrouillée.' 
+                                : 'Collez votre clé d\'authentification x-api-key fournie par iKeepay.'}
+                            </p>
+                          </div>
+
+                          {isChangingIkeepayKey && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={!newIkeepayKey.trim()}
+                                onClick={async () => {
+                                  if (!newIkeepayKey.trim()) return;
+                                  await handleSave({ ...settings, ikeepaySecretKey: newIkeepayKey.trim() });
+                                }}
+                                className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Check size={14} /> Enregistrer la nouvelle clé
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsChangingIkeepayKey(false);
+                                  setNewIkeepayKey('');
+                                }}
+                                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-medium"
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -59,6 +59,10 @@ const settingsSchema = new mongoose.Schema({
   cinetpaySecretKey: String,
   cinetpayMode: { type: String, default: 'test' },
   
+  // iKeepay Mobile Money (H2H)
+  enableIkeepay: { type: Boolean, default: false },
+  ikeepaySecretKey: String,
+  
   // SEO
   metaTitle: String,
   metaDescription: String,

@@ -41,7 +41,16 @@ const getSettings = asyncHandler(async (req, res) => {
     settings = settings.toObject();
   }
 
-  res.json({ ...settings, id: settings._id });
+  const hasIkeepaySecretKey = !!settings.ikeepaySecretKey;
+
+  // Sécuriser les clés sensibles avant de renvoyer
+  res.json({
+    ...settings,
+    id: settings._id,
+    hasIkeepaySecretKey,
+    // Ne jamais renvoyer la clé secrète en clair
+    ikeepaySecretKey: hasIkeepaySecretKey ? '••••••••••••••••••••••••••••••••' : ''
+  });
 });
 
 // @desc    Update settings
@@ -88,6 +97,9 @@ const updateSettings = asyncHandler(async (req, res) => {
     cinetpaySiteId,
     cinetpaySecretKey,
     cinetpayMode,
+    // iKeepay
+    enableIkeepay,
+    ikeepaySecretKey,
     // SEO
     metaTitle,
     metaDescription,
@@ -142,6 +154,7 @@ const updateSettings = asyncHandler(async (req, res) => {
     cinetpaySiteId: cinetpaySiteId ?? settings.cinetpaySiteId,
     cinetpaySecretKey: cinetpaySecretKey ?? settings.cinetpaySecretKey,
     cinetpayMode: cinetpayMode ?? settings.cinetpayMode,
+    enableIkeepay: enableIkeepay !== undefined ? enableIkeepay : settings.enableIkeepay,
     metaTitle: metaTitle ?? settings.metaTitle,
     metaDescription: metaDescription ?? settings.metaDescription,
     footerEmail: footerEmail ?? settings.footerEmail,
@@ -149,11 +162,22 @@ const updateSettings = asyncHandler(async (req, res) => {
     footerAddress: footerAddress ?? settings.footerAddress
   };
 
+  // Mettre à jour la clé iKeepay uniquement si une nouvelle valeur réelle est transmise (et pas les puces de masquage)
+  if (ikeepaySecretKey && typeof ikeepaySecretKey === 'string' && !ikeepaySecretKey.includes('•••') && ikeepaySecretKey.trim().length > 0) {
+    updateData.ikeepaySecretKey = ikeepaySecretKey.trim();
+  }
+
   const updatedSettings = await Settings.findByIdAndUpdate('main', updateData, { new: true });
+  const hasIkeepaySecretKey = !!updatedSettings.ikeepaySecretKey;
 
   res.json({
     message: 'Paramètres mis à jour avec succès',
-    settings: { ...updatedSettings.toObject(), id: updatedSettings._id }
+    settings: {
+      ...updatedSettings.toObject(),
+      id: updatedSettings._id,
+      hasIkeepaySecretKey,
+      ikeepaySecretKey: hasIkeepaySecretKey ? '••••••••••••••••••••••••••••••••' : ''
+    }
   });
 });
 

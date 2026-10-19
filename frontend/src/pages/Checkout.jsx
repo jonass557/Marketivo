@@ -1,6 +1,6 @@
-﻿import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -22,6 +22,18 @@ const Checkout = () => {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [createdOrderId, setCreatedOrderId] = useState(null);
   
+  // État spécifique pour le paiement Mobile Money (iKeepay)
+  const [ikeepayDetails, setIkeepayDetails] = useState({
+    country: 'CI',
+    operator: 'ORANGE',
+    phone: '',
+    otp: ''
+  });
+  const [ikeepayModalOpen, setIkeepayModalOpen] = useState(false);
+  const [ikeepayStatus, setIkeepayStatus] = useState('idle'); // 'idle' | 'pending' | 'success' | 'failed' | 'timeout'
+  const [ikeepayReference, setIkeepayReference] = useState('');
+  const [ikeepayCheckLoading, setIkeepayCheckLoading] = useState(false);
+
   // État pour le modal d'avis
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewProductIndex, setReviewProductIndex] = useState(0);
@@ -157,7 +169,10 @@ const Checkout = () => {
       setOrderedProducts(cartItems.map(item => ({ id: item.id, name: item.name, image: item.images?.[0] || item.image })));
       
       // Traiter le paiement selon la méthode choisie
-      if (formData.paymentMethod === 'cod' || formData.paymentMethod === 'momo' || formData.paymentMethod === 'om') {
+      if (formData.paymentMethod === 'ikeepay') {
+        // Paiement Mobile Money direct iKeepay (H2H)
+        await handleIkeepayPayment(orderId, total);
+      } else if (formData.paymentMethod === 'cod' || formData.paymentMethod === 'momo' || formData.paymentMethod === 'om') {
         // Paiement à la livraison ou Mobile Money local - Succès direct
         setOrderSuccess(data);
         clearCart();
@@ -279,6 +294,115 @@ const Checkout = () => {
     }
   };
 
+  // Paiement iKeepay Mobile Money (H2H)
+  const handleIkeepayPayment = async (orderId, amount) => {
+    try {
+      setPaymentLoading(true);
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      
+      const phoneToUse = (ikeepayDetails.phone || formData.phone || '').trim();
+      if (!phoneToUse) {
+        throw new Error('Veuillez saisir votre numéro de téléphone Mobile Money');
+      }
+
+      const { data } = await axios.post(`${API_URL}/api/payments/ikeepay/payin`, {
+        orderId,
+        amount,
+        currency: settings?.currency || 'XOF',
+        country: ikeepayDetails.country || 'CI',
+        operator: ikeepayDetails.operator || 'ORANGE',
+        phoneNumber: phoneToUse,
+        otp: ikeepayDetails.otp?.trim() || undefined
+      }, config);
+
+      if (data.payment_link) {
+        // Redirection vers le lien de paiement externe (Wave ou Orange web)
+        localStorage.setItem('pendingIkeepayOrder', JSON.stringify({ orderId, reference: data.external_reference }));
+        clearCart();
+        window.location.href = data.payment_link;
+      } else {
+        // Débit Push direct sur le téléphone mobile
+        setIkeepayReference(data.external_reference);
+        setIkeepayStatus('pending');
+        setIkeepayModalOpen(true);
+        startIkeepayPolling(data.external_reference, orderId);
+      }
+    } catch (error) {
+      console.error('Erreur iKeepay:', error);
+      const msg = error.response?.data?.message || error.message || 'Erreur lors du paiement Mobile Money';
+      toast.error(msg);
+      setError(msg);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  // Polling automatique pour vérifier le statut du paiement iKeepay
+  const startIkeepayPolling = (reference, orderId) => {
+    let attempts = 0;
+    const maxAttempts = 35; // 35 * 4s = 140s (~2min20)
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+        const { data } = await axios.get(`${API_URL}/api/payments/ikeepay/verify/${reference}`, config);
+
+        if (data.isPaid || data.status === 'completed' || data.status === 'success') {
+          clearInterval(interval);
+          setIkeepayStatus('success');
+          clearCart();
+          localStorage.removeItem('checkoutFormData');
+          toast.success('Paiement Mobile Money validé avec succès !');
+          setTimeout(() => {
+            setIkeepayModalOpen(false);
+            setOrderSuccess({ order: { id: orderId } });
+            setTimeout(() => setShowReviewModal(true), 1500);
+          }, 1800);
+        } else if (data.status === 'failed') {
+          clearInterval(interval);
+          setIkeepayStatus('failed');
+          toast.error('La transaction Mobile Money a été rejetée ou a échoué');
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          setIkeepayStatus('timeout');
+        }
+      } catch (e) {
+        console.error('Erreur vérification iKeepay:', e);
+      }
+    }, 4000);
+  };
+
+  // Vérification manuelle par le client en cliquant sur le bouton
+  const checkIkeepayStatusManually = async () => {
+    if (!ikeepayReference) return;
+    try {
+      setIkeepayCheckLoading(true);
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const { data } = await axios.get(`${API_URL}/api/payments/ikeepay/verify/${ikeepayReference}`, config);
+
+      if (data.isPaid || data.status === 'completed' || data.status === 'success') {
+        setIkeepayStatus('success');
+        clearCart();
+        localStorage.removeItem('checkoutFormData');
+        toast.success('Paiement Mobile Money validé avec succès !');
+        setTimeout(() => {
+          setIkeepayModalOpen(false);
+          setOrderSuccess({ order: { id: createdOrderId } });
+          setTimeout(() => setShowReviewModal(true), 1500);
+        }, 1800);
+      } else if (data.status === 'failed') {
+        setIkeepayStatus('failed');
+        toast.error('Le paiement a été rejeté ou a échoué.');
+      } else {
+        toast.info('Paiement en attente de validation sur votre téléphone mobile...');
+      }
+    } catch (e) {
+      toast.error('Impossible de vérifier le statut pour l\'instant.');
+    } finally {
+      setIkeepayCheckLoading(false);
+    }
+  };
+
   // Obtenir l'icône du moyen de paiement
   const getPaymentIcon = (method) => {
     const icons = {
@@ -287,7 +411,8 @@ const Checkout = () => {
       om: '🟠',
       stripe: '💳',
       paypal: '🅿️',
-      cinetpay: '🌍'
+      cinetpay: '🌍',
+      ikeepay: '📱'
     };
     return icons[method.id] || method.icon || '💰';
   };
@@ -664,15 +789,98 @@ const Checkout = () => {
                             {method.type === 'card' && 'Visa, Mastercard, etc.'}
                             {method.type === 'paypal' && 'Paiement sécurisé PayPal'}
                             {method.type === 'cinetpay' && 'MTN MoMo, Orange Money, Moov...'}
+                            {method.type === 'ikeepay' && (method.description || 'Orange, MTN, Wave, Moov, Airtel, Mobicash...')}
                             {method.type === 'mobile' && 'Paiement mobile local'}
                             {method.type === 'cash' && 'Payez en espèces à la réception'}
                           </p>
                         </div>
-                        {(method.type === 'card' || method.type === 'paypal' || method.type === 'cinetpay') && (
+                        {(method.type === 'card' || method.type === 'paypal' || method.type === 'cinetpay' || method.type === 'ikeepay') && (
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Sécurisé</span>
                         )}
                       </label>
                     ))}
+                  </div>
+                )}
+
+                {/* Formulaire spécifique Mobile Money iKeepay */}
+                {formData.paymentMethod === 'ikeepay' && (
+                  <div className="mt-4 p-4 bg-orange-50/80 border border-orange-200 rounded-xl space-y-4 animate-fade-in">
+                    <div className="flex items-center gap-2 text-orange-900 font-semibold text-sm border-b border-orange-200 pb-2">
+                      <Smartphone size={18} className="text-orange-600" />
+                      <span>Paramètres du paiement Mobile Money</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Pays <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={ikeepayDetails.country}
+                          onChange={(e) => setIkeepayDetails({ ...ikeepayDetails, country: e.target.value })}
+                          className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="CI">🇨🇮 Côte d'Ivoire (+225)</option>
+                          <option value="CM">🇨🇲 Cameroun (+237)</option>
+                          <option value="SN">🇸🇳 Sénégal (+221)</option>
+                          <option value="BF">🇧🇫 Burkina Faso (+226)</option>
+                          <option value="BJ">🇧🇯 Bénin (+229)</option>
+                          <option value="ML">🇲🇱 Mali (+223)</option>
+                          <option value="TG">🇹🇬 Togo (+228)</option>
+                          <option value="GN">🇬🇳 Guinée (+224)</option>
+                          <option value="CD">🇨🇩 RDC (+243)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Opérateur Mobile Money <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={ikeepayDetails.operator}
+                          onChange={(e) => setIkeepayDetails({ ...ikeepayDetails, operator: e.target.value })}
+                          className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="ORANGE">🟠 ORANGE MONEY</option>
+                          <option value="MTN">🟡 MTN MOBILE MONEY</option>
+                          <option value="WAVE">🌊 WAVE</option>
+                          <option value="MOOV">🔵 MOOV MONEY</option>
+                          <option value="MOBICASH">🟢 MOBICASH</option>
+                          <option value="AIRTEL">🔴 AIRTEL MONEY</option>
+                          <option value="VODACOM">🔴 VODACOM M-PESA</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Numéro de téléphone Mobile Money <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={ikeepayDetails.phone || formData.phone}
+                        onChange={(e) => setIkeepayDetails({ ...ikeepayDetails, phone: e.target.value })}
+                        placeholder="Ex: 2250700000000 ou 0700000000"
+                        className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500"
+                        required
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        La notification de paiement sécurisé Push USSD sera envoyée directement sur ce numéro.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                        Code OTP <span className="text-gray-400 font-normal">(Optionnel, ex: Orange Burkina Faso)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={ikeepayDetails.otp}
+                        onChange={(e) => setIkeepayDetails({ ...ikeepayDetails, otp: e.target.value })}
+                        placeholder="Code OTP si demandé par votre opérateur"
+                        className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -784,6 +992,118 @@ const Checkout = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal de suivi de paiement Mobile Money iKeepay */}
+      {ikeepayModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-center animate-fade-in space-y-4">
+            
+            {ikeepayStatus === 'pending' && (
+              <>
+                <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                  <Smartphone size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Validation sur votre mobile</h3>
+                
+                <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-950 space-y-2 text-left">
+                  <p>
+                    Une demande de débit de <strong className="text-orange-600">{formatPrice(total)}</strong> a été envoyée au :
+                  </p>
+                  <p className="font-mono font-bold text-base bg-white p-2 rounded border border-orange-200 text-center text-gray-800">
+                    📱 {ikeepayDetails.phone || formData.phone} ({ikeepayDetails.operator})
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    👉 <strong>Action requise :</strong> Consultez votre téléphone et tapez votre code secret Mobile Money pour valider la transaction.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-500 pt-2">
+                  <Loader className="animate-spin text-orange-500" size={16} />
+                  <span>En attente de votre confirmation...</span>
+                </div>
+
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={ikeepayCheckLoading}
+                    onClick={checkIkeepayStatusManually}
+                    className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                  >
+                    {ikeepayCheckLoading ? <Loader className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+                    J'ai validé sur mon téléphone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIkeepayModalOpen(false)}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    Fermer la fenêtre
+                  </button>
+                </div>
+              </>
+            )}
+
+            {ikeepayStatus === 'success' && (
+              <div className="py-4 space-y-3">
+                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle size={36} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Paiement validé avec succès !</h3>
+                <p className="text-sm text-gray-600">Votre commande est confirmée et payée.</p>
+              </div>
+            )}
+
+            {ikeepayStatus === 'failed' && (
+              <div className="py-2 space-y-3">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle size={36} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Échec du paiement</h3>
+                <p className="text-sm text-gray-600">La transaction a été annulée ou refusée par l'opérateur.</p>
+                <div className="flex gap-2 justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIkeepayModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium"
+                  >
+                    Réessayer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {ikeepayStatus === 'timeout' && (
+              <div className="py-2 space-y-3">
+                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle size={36} />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Délai d'attente dépassé</h3>
+                <p className="text-xs text-gray-600">
+                  Si vous avez déjà validé le débit sur votre téléphone, votre commande sera automatiquement mise à jour dès notification de l'opérateur.
+                </p>
+                <div className="flex gap-2 justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={checkIkeepayStatusManually}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
+                  >
+                    Vérifier à nouveau
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIkeepayModalOpen(false)}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

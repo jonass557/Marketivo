@@ -49,6 +49,14 @@ const orderSchema = new mongoose.Schema({
     type: String,
     default: 'cod'
   },
+  paymentStatus: {
+    type: String,
+    enum: ['PENDING', 'PAID', 'FAILED', 'CANCELLED'],
+    default: 'PENDING'
+  },
+  paymentId: String,
+  paymentReference: String,
+  providerReference: String,
   shippingAddress: {
     type: String,
     required: true

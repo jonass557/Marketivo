@@ -13,6 +13,11 @@ const {
   initializeCinetPayPayment,
   cinetPayNotify,
   checkCinetPayStatus,
+  // iKeepay
+  initiateIkeepayPayment,
+  verifyIkeepayPayment,
+  ikeepayWebhook,
+  initiateIkeepayPayout,
   // General
   getPaymentMethods
 } = require('../controllers/paymentController');
@@ -33,5 +38,11 @@ router.post('/paypal/capture', protect, capturePayPalPayment);
 router.post('/cinetpay/initialize', protect, initializeCinetPayPayment);
 router.post('/cinetpay/notify', cinetPayNotify); // Webhook public
 router.post('/cinetpay/check', protect, checkCinetPayStatus);
+
+// iKeepay routes
+router.post('/ikeepay/payin', protect, initiateIkeepayPayment);
+router.get('/ikeepay/verify/:reference', protect, verifyIkeepayPayment);
+router.post('/ikeepay/webhook', ikeepayWebhook); // Webhook public
+router.post('/ikeepay/payout', protect, initiateIkeepayPayout);
 
 module.exports = router;
