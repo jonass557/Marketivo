@@ -3,19 +3,36 @@ import { Link } from 'react-router-dom';
 import { Check, Gift, Zap, Star, Crown, ArrowRight } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
+import { DEFAULT_PLANS } from '../data/defaultData';
 
 const Pricing = () => {
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Chargement instantané (Cache local ou plans par défaut intégrés : 0ms de latence)
+  const [plans, setPlans] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_subscription_plans');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_PLANS;
+  });
+  const [loading, setLoading] = useState(false);
   const [duration, setDuration] = useState('monthly');
 
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const { data } = await axios.get(`${API_URL}/api/subscriptions/plans`);
-        setPlans(data);
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
+        const { data } = await axios.get(`${API_URL}/api/subscriptions/plans`, { timeout: 12000 });
+        if (Array.isArray(data) && data.length > 0) {
+          setPlans(data);
+          try {
+            localStorage.setItem('marketivo_subscription_plans', JSON.stringify(data));
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('API lente ou hors-ligne, plans par défaut actifs:', err.message);
+      }
     };
     fetchPlans();
   }, []);

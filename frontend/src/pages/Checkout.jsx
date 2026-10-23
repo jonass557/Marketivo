@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
 import axios from 'axios';
 import API_URL from '../config/api';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../data/defaultData';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -549,8 +550,10 @@ const Checkout = () => {
               {/* Produit actuel */}
               <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg mb-6">
                 <img
-                  src={orderedProducts[reviewProductIndex]?.image || 'https://via.placeholder.com/60'}
+                  src={safeImage(orderedProducts[reviewProductIndex]?.image)}
                   alt={orderedProducts[reviewProductIndex]?.name}
+                  loading="lazy"
+                  onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                   className="w-16 h-16 object-cover rounded"
                 />
                 <div>
@@ -928,8 +931,10 @@ const Checkout = () => {
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex gap-3">
                     <img
-                      src={item.images?.[0] || item.image || 'https://via.placeholder.com/100x100?text=Produit'}
+                      src={safeImage(item.images?.[0] || item.image)}
                       alt={item.name}
+                      loading="lazy"
+                      onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                       className="w-16 h-16 object-cover rounded"
                     />
                     <div className="flex-1">

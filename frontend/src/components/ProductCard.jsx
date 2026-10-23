@@ -4,6 +4,7 @@ import { Star, Heart, ShoppingCart, ExternalLink, Store } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../data/defaultData';
 
 const ProductCard = ({ product }) => {
   const { addToCart } = useContext(CartContext);
@@ -48,8 +49,8 @@ const ProductCard = ({ product }) => {
   const displayRating = rating || 0;
   const displayReviewCount = reviewCount || reviews || 0;
   
-  // Utiliser la première image du tableau ou l'image unique
-  const productImage = images?.[0] || image || 'https://via.placeholder.com/300x300?text=Produit';
+  // Utiliser la première image valide ou l'image SVG intégrée instantanée
+  const productImage = safeImage(images?.[0] || image, FALLBACK_IMAGE_SVG);
 
   const handleAddToCart = (e) => {
     e.preventDefault();
@@ -83,13 +84,18 @@ const ProductCard = ({ product }) => {
 
   return (
     <CardWrapper>
-      {/* Image */}
-      <div className="relative overflow-hidden aspect-square">
+      {/* Image avec sécurité anti-erreur et chargement rapide */}
+      <div className="relative overflow-hidden aspect-square bg-gray-100">
         <img
           src={productImage}
           alt={name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = FALLBACK_IMAGE_SVG;
+          }}
         />
         {discount && (
           <span className="absolute top-2 left-2 bg-theme-primary text-white text-xs font-bold px-2 py-1 rounded">

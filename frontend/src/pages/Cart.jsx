@@ -4,6 +4,7 @@ import { Trash2, Minus, Plus, ShoppingBag, ArrowLeft } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../data/defaultData';
 
 const Cart = () => {
   const { cartItems, cartTotal, updateQuantity, removeFromCart } = useContext(CartContext);
@@ -51,8 +52,10 @@ const Cart = () => {
                   {/* Image */}
                   <Link to={`/product/${item.id}`} className="flex-shrink-0">
                     <img
-                      src={item.images?.[0] || item.image || 'https://via.placeholder.com/100x100?text=Produit'}
+                      src={safeImage(item.images?.[0] || item.image)}
                       alt={item.name}
+                      loading="lazy"
+                      onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                       className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded"
                     />
                   </Link>

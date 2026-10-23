@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import API_URL from '../../config/api';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../../data/defaultData';
 import {
   DollarSign,
   ShoppingCart,
@@ -293,7 +294,13 @@ const Dashboard = () => {
                         onClick={() => { setSearchQuery(''); setShowSearch(false); }}
                         className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded"
                       >
-                        <img src={product.images?.[0] || 'https://via.placeholder.com/32'} alt="" className="w-8 h-8 rounded object-cover" />
+                        <img
+                          src={safeImage(product.images?.[0])}
+                          alt=""
+                          loading="lazy"
+                          onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
+                          className="w-8 h-8 rounded object-cover"
+                        />
                         <div>
                           <p className="text-sm font-medium">{product.name}</p>
                           <p className="text-xs text-gray-500">{product.category?.name}</p>
@@ -629,8 +636,10 @@ const Dashboard = () => {
               topProducts.map((product, index) => (
                 <div key={index} className="flex items-center gap-4">
                   <img
-                    src={product.images?.[0] || 'https://via.placeholder.com/48x48?text=P'}
+                    src={safeImage(product.images?.[0])}
                     alt={product.name}
+                    loading="lazy"
+                    onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                     className="w-12 h-12 rounded-lg object-cover"
                   />
                   <div className="flex-1 min-w-0">

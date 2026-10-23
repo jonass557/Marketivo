@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import API_URL from '../../config/api';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../../data/defaultData';
 import {
   Plus,
   Search,
@@ -376,8 +377,10 @@ const Products = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <img
-                          src={product.images?.[0] || 'https://via.placeholder.com/100x100?text=Produit'}
+                          src={safeImage(product.images?.[0])}
                           alt={product.name}
+                          loading="lazy"
+                          onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
                         <div>

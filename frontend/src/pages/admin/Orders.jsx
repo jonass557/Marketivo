@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Eye, ChevronLeft, ChevronRight, Download, Loader, CheckCircle, XCircle, Truck, Package, Clock } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../../config/api';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../../data/defaultData';
 import { useToast } from '../../context/ToastContext';
 import AuthContext from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -511,8 +512,10 @@ const Orders = () => {
                   {selectedOrder.items?.map((item, index) => (
                     <div key={index} className="flex items-center gap-4 p-3 border-b last:border-0">
                       <img 
-                        src={item.product?.images?.[0] || 'https://via.placeholder.com/60x60?text=Produit'}
+                        src={safeImage(item.product?.images?.[0])}
                         alt={item.product?.name}
+                        loading="lazy"
+                        onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                         className="w-14 h-14 object-cover rounded"
                       />
                       <div className="flex-1">

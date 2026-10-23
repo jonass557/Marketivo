@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { Filter, Grid, List, ChevronDown, X, Loader, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
@@ -6,12 +6,38 @@ import API_URL from '../config/api';
 import ProductCard from '../components/ProductCard';
 import { useSettings } from '../context/SettingsContext';
 
+import { DEFAULT_CATEGORIES, DEFAULT_PRODUCTS } from '../data/defaultData';
+
 const Shop = () => {
   const [searchParams] = useSearchParams();
   const { formatPrice } = useSettings();
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Initialisation instantanée (0ms)
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_products');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_PRODUCTS;
+  });
+
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_categories');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return ['Tous', ...parsed.map(c => c.name)];
+        }
+      }
+    } catch (e) {}
+    return ['Tous', ...DEFAULT_CATEGORIES.map(c => c.name)];
+  });
+
+  const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState('popular');
   const [priceRange, setPriceRange] = useState([0, 2000000]);
@@ -22,24 +48,36 @@ const Shop = () => {
 
   const location = useLocation();
 
-  // Charger les produits et catégories depuis l'API (rafraîchit à chaque navigation)
+  // Charger les produits et catégories depuis l'API en tâche de fond (silencieux)
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       try {
-        setLoading(true);
-        const [productsRes, categoriesRes] = await Promise.all([
+        const results = await Promise.allSettled([
           axios.get(`${API_URL}/api/products`),
           axios.get(`${API_URL}/api/categories`)
         ]);
-        setProducts(productsRes.data.products || productsRes.data || []);
-        setCategories(['Tous', ...categoriesRes.data.map(cat => cat.name)]);
+
+        if (!isMounted) return;
+
+        if (results[0].status === 'fulfilled') {
+          const list = results[0].value?.data?.products || results[0].value?.data;
+          if (Array.isArray(list) && list.length > 0) {
+            setProducts(list);
+            try { localStorage.setItem('marketivo_products', JSON.stringify(list)); } catch (e) {}
+          }
+        }
+
+        if (results[1].status === 'fulfilled' && Array.isArray(results[1].value?.data) && results[1].value.data.length > 0) {
+          setCategories(['Tous', ...results[1].value.data.map(cat => cat.name)]);
+          try { localStorage.setItem('marketivo_categories', JSON.stringify(results[1].value.data)); } catch (e) {}
+        }
       } catch (error) {
-        console.error('Erreur:', error);
-      } finally {
-        setLoading(false);
+        console.warn('Erreur chargement shop:', error);
       }
     };
     fetchData();
+    return () => { isMounted = false; };
   }, [location.key]);
 
   // Mettre à jour la recherche quand l'URL change

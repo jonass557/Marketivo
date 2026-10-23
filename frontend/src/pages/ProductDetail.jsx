@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus, ChevronRight, Share2, MessageCircle, Facebook, Copy, Check, Loader, User, ExternalLink, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
@@ -7,6 +7,7 @@ import CartContext from '../context/CartContext';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../data/defaultData';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -181,9 +182,8 @@ const ProductDetail = () => {
   }
 
   // Préparer les images (utiliser un tableau même si une seule image)
-  const productImages = product.images?.length > 0 
-    ? product.images 
-    : ['https://via.placeholder.com/600x600?text=Produit'];
+  const productImages = (product.images?.length > 0 ? product.images : [product.image]).filter(Boolean).map(img => safeImage(img));
+  if (productImages.length === 0) productImages.push(FALLBACK_IMAGE_SVG);
 
   return (
     <div className="min-h-screen bg-gray-100 py-6">
@@ -214,8 +214,10 @@ const ProductDetail = () => {
             {/* Image principale */}
             <div className="relative mb-3 sm:mb-4">
               <img
-                src={productImages[selectedImage]}
+                src={productImages[selectedImage] || FALLBACK_IMAGE_SVG}
                 alt={product.name}
+                loading="lazy"
+                onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                 className="w-full h-64 sm:h-80 lg:h-96 object-contain rounded"
               />
               {product.discount && (
@@ -238,7 +240,13 @@ const ProductDetail = () => {
                     selectedImage === index ? 'border-orange-500 ring-2 ring-orange-200' : 'border-gray-200'
                   }`}
                 >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={img}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
+                    className="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

@@ -6,6 +6,7 @@ import ProductCard from '../components/ProductCard';
 import { useSettings } from '../context/SettingsContext';
 import axios from 'axios';
 import API_URL from '../config/api';
+import { DEFAULT_CATEGORIES, DEFAULT_PRODUCTS, FALLBACK_IMAGE_SVG, FALLBACK_AVATAR_SVG } from '../data/defaultData';
 
 const AnimatedCounter = ({ target, suffix = '', duration = 2000 }) => {
   const [count, setCount] = useState(0);
@@ -38,8 +39,30 @@ const Home = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [blogs, setBlogs] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [products, setProducts] = useState([]);
+  
+  // Initialisation instantanée (0ms) depuis le cache local ou données par défaut fiables
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_categories');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_CATEGORIES;
+  });
+
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_products');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_PRODUCTS;
+  });
+
   const [partners, setPartners] = useState([]);
   const [topVendors, setTopVendors] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,25 +76,54 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       try {
-        const [blogsRes, categoriesRes, productsRes, partnersRes, topVendorsRes] = await Promise.all([
+        const results = await Promise.allSettled([
           axios.get(`${API_URL}/api/blogs?published=true`),
           axios.get(`${API_URL}/api/categories`),
           axios.get(`${API_URL}/api/products`),
-          axios.get(`${API_URL}/api/partners`).catch(() => ({ data: [] })),
-          axios.get(`${API_URL}/api/vendors/top?limit=8`).catch(() => ({ data: [] }))
+          axios.get(`${API_URL}/api/partners`),
+          axios.get(`${API_URL}/api/vendors/top?limit=8`)
         ]);
-        setBlogs(blogsRes.data.slice(0, 3));
-        setCategories(categoriesRes.data);
-        setProducts(productsRes.data.products || productsRes.data || []);
-        setPartners(partnersRes.data || []);
-        setTopVendors(topVendorsRes.data || []);
+
+        if (!isMounted) return;
+
+        // Blogs
+        if (results[0].status === 'fulfilled' && Array.isArray(results[0].value?.data)) {
+          setBlogs(results[0].value.data.slice(0, 3));
+        }
+
+        // Catégories
+        if (results[1].status === 'fulfilled' && Array.isArray(results[1].value?.data) && results[1].value.data.length > 0) {
+          setCategories(results[1].value.data);
+          try { localStorage.setItem('marketivo_categories', JSON.stringify(results[1].value.data)); } catch (e) {}
+        }
+
+        // Produits
+        if (results[2].status === 'fulfilled') {
+          const list = results[2].value?.data?.products || results[2].value?.data;
+          if (Array.isArray(list) && list.length > 0) {
+            setProducts(list);
+            try { localStorage.setItem('marketivo_products', JSON.stringify(list)); } catch (e) {}
+          }
+        }
+
+        // Partenaires
+        if (results[3].status === 'fulfilled' && Array.isArray(results[3].value?.data)) {
+          setPartners(results[3].value.data);
+        }
+
+        // Top Vendeurs
+        if (results[4].status === 'fulfilled' && Array.isArray(results[4].value?.data)) {
+          setTopVendors(results[4].value.data);
+        }
       } catch (error) {
-        console.error('Erreur:', error);
+        console.warn('Erreur chargement background:', error);
       }
     };
     fetchData();
+    return () => { isMounted = false; };
   }, [location.key]);
 
   // Données de démonstration pour les bannières
@@ -255,7 +307,7 @@ const Home = () => {
                   className="flex flex-col items-center gap-1.5 group">
                   <div className="w-14 h-14 bg-orange-50 rounded-2xl overflow-hidden flex items-center justify-center group-hover:bg-orange-100 transition-colors border border-orange-100">
                     {cat.image
-                      ? <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
+                      ? <img src={cat.image} alt={cat.name} loading="lazy" onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }} className="w-full h-full object-cover" />
                       : <span className="text-2xl">🛍️</span>}
                   </div>
                   <span className="text-[11px] text-center text-gray-600 group-hover:text-orange-500 transition-colors font-medium leading-tight">{cat.name}</span>
@@ -333,7 +385,7 @@ const Home = () => {
                   className="group flex flex-col items-center p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:shadow-md transition-all bg-gray-50/50">
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center mb-3 overflow-hidden border-2 border-orange-200 group-hover:border-orange-400 transition-colors">
                     {v.logo
-                      ? <img src={v.logo} alt={v.shopName} className="w-full h-full object-cover rounded-full" />
+                      ? <img src={v.logo} alt={v.shopName} loading="lazy" onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_AVATAR_SVG; }} className="w-full h-full object-cover rounded-full" />
                       : <Store size={24} className="text-orange-400" />}
                   </div>
                   <h3 className="font-semibold text-sm text-center text-gray-800 group-hover:text-orange-500 transition-colors truncate w-full">{v.shopName}</h3>

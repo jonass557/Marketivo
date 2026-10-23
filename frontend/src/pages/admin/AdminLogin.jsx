@@ -1,4 +1,4 @@
-﻿import React, { useState, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, Shield } from 'lucide-react';
 import AuthContext from '../../context/AuthContext';
@@ -19,13 +19,16 @@ const AdminLogin = () => {
     setError('');
     setLoading(true);
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
       const { data } = await axios.post(`${API_URL}/api/auth/admin/login`, {
-        email,
-        password
+        email: cleanEmail,
+        password: cleanPassword
       });
 
-      if (data.role !== 'ADMIN') {
+      if (data.role !== 'ADMIN' && data.role !== 'SUPER_ADMIN') {
         setError('Accès non autorisé. Vous devez être administrateur.');
         return;
       }
@@ -33,7 +36,13 @@ const AdminLogin = () => {
       login(data);
       navigate('/admin');
     } catch (err) {
-      setError(err.response?.data?.message || 'Identifiants incorrects');
+      if (!err.response) {
+        setError('Impossible de joindre le serveur. Il se réveille peut-être (démarrage à froid Render ~30s). Veuillez patienter quelques instants et réessayer.');
+      } else if (err.response.status === 429) {
+        setError('Trop de requêtes récentes. Veuillez patienter 1 minute.');
+      } else {
+        setError(err.response?.data?.message || 'Identifiants incorrects');
+      }
     } finally {
       setLoading(false);
     }
@@ -54,7 +63,7 @@ const AdminLogin = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6 text-sm">
               {error}
             </div>
           )}
@@ -63,16 +72,18 @@ const AdminLogin = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email administrateur
+                Identifiant ou Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
-                  placeholder="admin@myshop.cm"
+                  placeholder="admin@marketivo.com ou admin"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   required
                 />
               </div>

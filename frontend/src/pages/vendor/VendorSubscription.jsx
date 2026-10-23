@@ -3,25 +3,43 @@ import { Check, Star, Zap, Crown, Gift, ArrowRight, Clock, CreditCard } from 'lu
 import axios from 'axios';
 import API_URL from '../../config/api';
 import AuthContext from '../../context/AuthContext';
+import { DEFAULT_PLANS } from '../../data/defaultData';
 
 const VendorSubscription = () => {
   const { user } = useContext(AuthContext);
-  const [plans, setPlans] = useState([]);
+  // Affichage instantané avec les plans par défaut ou le cache
+  const [plans, setPlans] = useState(() => {
+    try {
+      const cached = localStorage.getItem('marketivo_subscription_plans');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_PLANS;
+  });
   const [currentSub, setCurrentSub] = useState(null);
   const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState('monthly');
 
   useEffect(() => {
-    Promise.all([fetchPlans(), fetchMySubscription()]).finally(() => setLoading(false));
+    Promise.allSettled([fetchPlans(), fetchMySubscription()]).finally(() => setLoading(false));
   }, []);
 
   const fetchPlans = async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/subscriptions/plans`);
-      setPlans(data);
-    } catch (err) { console.error(err); }
+      const { data } = await axios.get(`${API_URL}/api/subscriptions/plans`, { timeout: 12000 });
+      if (Array.isArray(data) && data.length > 0) {
+        setPlans(data);
+        try {
+          localStorage.setItem('marketivo_subscription_plans', JSON.stringify(data));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Plans par défaut utilisés:', err.message);
+    }
   };
 
   const fetchMySubscription = async () => {

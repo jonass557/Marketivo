@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Trash2, Star, ChevronLeft, ChevronRight, Loader, MessageSquare } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../../config/api';
+import { FALLBACK_IMAGE_SVG, safeImage } from '../../data/defaultData';
 import { useToast } from '../../context/ToastContext';
 import AuthContext from '../../context/AuthContext';
 
@@ -207,8 +208,10 @@ const Reviews = () => {
                   <div className="flex items-start gap-4 flex-1">
                     {/* Product Image */}
                     <img
-                      src={review.product?.images?.[0] || 'https://via.placeholder.com/60x60?text=Produit'}
+                      src={safeImage(review.product?.images?.[0])}
                       alt={review.product?.name}
+                      loading="lazy"
+                      onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE_SVG; }}
                       className="w-14 h-14 rounded-lg object-cover"
                     />
                     

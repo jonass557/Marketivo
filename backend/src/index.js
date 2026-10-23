@@ -39,13 +39,16 @@ const partnerRoutes = require('./routes/partnerRoutes');
 const app = express();
 const server = http.createServer(app);
 
+// Nécessaire derrière les reverse proxies (Render, Vercel, Heroku) pour obtenir la vraie IP client
+app.set('trust proxy', 1);
+
 // Suivi des utilisateurs en ligne
 const onlineUsers = new Map(); // userId -> Set<socketId>
 
 // Configuration Socket.io
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
@@ -132,11 +135,28 @@ io.on('connection', (socket) => {
   });
 });
 
-// Configuration CORS pour production
+// Configuration CORS tout environnement (Vercel, dev local, etc.)
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000'
+].filter(Boolean);
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Autorise tous les sous-domaines Vercel preview et prod (*.vercel.app)
+    if (/^https:\/\/[a-zA-Z0-9-._]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    // En production ou domaine personnalisé
+    callback(null, true);
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
 };
 app.use(cors(corsOptions));
 
@@ -157,17 +177,19 @@ app.use(compression());
 // Limite le nombre de requêtes par IP (anti-DDoS / brute-force)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // 200 requêtes max par fenêtre
+  max: 1000, // 1000 requêtes max par fenêtre
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Trop de requêtes, veuillez réessayer dans 15 minutes.' }
 });
 app.use('/api/', apiLimiter);
 
-// Limite stricte pour les routes d'authentification (anti brute-force)
+// Limite pour les routes d'authentification
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 100, // 100 tentatives max par fenêtre
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { message: 'Trop de tentatives de connexion, réessayez dans 15 minutes.' }
 });
 app.use('/api/auth/login', authLimiter);
