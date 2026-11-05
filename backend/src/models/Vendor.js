@@ -42,6 +42,19 @@ const vendorSchema = new mongoose.Schema({
     type: String,
     default: 'Cameroun'
   },
+  // Personnalisation boutique (Modèle Chariow)
+  accentColor: {
+    type: String,
+    default: '#f97316'
+  },
+  tagline: {
+    type: String,
+    default: ''
+  },
+  theme: {
+    type: String,
+    default: 'modern'
+  },
   // Business info
   businessType: {
     type: String,
@@ -49,6 +62,30 @@ const vendorSchema = new mongoose.Schema({
     default: 'individual'
   },
   idDocument: String, // URL du document d'identité
+  // KYC Vendeur : CNI + Selfie, vérification obligatoire pour débloquer les retraits
+  kycStatus: {
+    type: String,
+    enum: ['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED'],
+    default: 'NOT_SUBMITTED'
+  },
+  kycIdDocument: {
+    type: String,
+    default: ''
+  },
+  kycSelfie: {
+    type: String,
+    default: ''
+  },
+  kycSubmittedAt: Date,
+  kycVerifiedAt: Date,
+  kycRejectionReason: {
+    type: String,
+    default: ''
+  },
+  payoutsBlocked: {
+    type: Boolean,
+    default: true // Par défaut bloqué tant que KYC non vérifié
+  },
   // Status
   status: {
     type: String,
@@ -75,6 +112,23 @@ const vendorSchema = new mongoose.Schema({
     default: 0
   },
   totalRevenue: {
+    type: Number,
+    default: 0
+  },
+  // Stats hybrides (Chariow + Jumia)
+  digitalSales: {
+    type: Number,
+    default: 0
+  },
+  physicalSales: {
+    type: Number,
+    default: 0
+  },
+  digitalRevenue: {
+    type: Number,
+    default: 0
+  },
+  physicalRevenue: {
     type: Number,
     default: 0
   },

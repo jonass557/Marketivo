@@ -31,6 +31,38 @@ const productSchema = new mongoose.Schema({
     ref: 'Category',
     required: true
   },
+  // Type de produit : Physique (modèle Jumia) ou Digital (modèle Chariow)
+  productType: {
+    type: String,
+    enum: ['PHYSICAL', 'DIGITAL'],
+    default: 'PHYSICAL'
+  },
+  // Champs spécifiques aux produits digitaux (Chariow)
+  digitalType: {
+    type: String,
+    enum: ['EBOOK', 'COURSE', 'TEMPLATE', 'SOFTWARE', 'COACHING', 'FILE', 'OTHER'],
+    default: 'EBOOK'
+  },
+  digitalFileUrl: {
+    type: String,
+    default: ''
+  },
+  digitalFileName: {
+    type: String,
+    default: ''
+  },
+  digitalFileSize: {
+    type: String,
+    default: ''
+  },
+  digitalAccessLink: {
+    type: String,
+    default: ''
+  },
+  digitalInstructions: {
+    type: String,
+    default: ''
+  },
   // Vendeur propriétaire du produit (null = produit admin/marketplace)
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
@@ -62,5 +94,6 @@ const productSchema = new mongoose.Schema({
 
 productSchema.index({ vendor: 1 });
 productSchema.index({ visibilityScore: -1 });
+productSchema.index({ productType: 1 });
 
 module.exports = mongoose.model('Product', productSchema);

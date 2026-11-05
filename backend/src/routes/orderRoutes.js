@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createOrder,
   getMyOrders,
+  getMyDigitalDownloads,
   getOrderById,
   getAllOrders,
   updateOrderStatus,
@@ -13,6 +14,7 @@ const { protect, admin } = require('../middleware/auth');
 // Routes utilisateur
 router.post('/', protect, createOrder);
 router.get('/myorders', protect, getMyOrders);
+router.get('/my-digital-downloads', protect, getMyDigitalDownloads);
 router.get('/:id', protect, getOrderById);
 
 // Routes admin

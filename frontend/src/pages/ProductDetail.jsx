@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus, ChevronRight, Share2, MessageCircle, Facebook, Copy, Check, Loader, User, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus, ChevronRight, Share2, MessageCircle, Facebook, Copy, Check, Loader, User, ExternalLink, ArrowLeft, Zap, Download, FileText } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
 import CartContext from '../context/CartContext';
@@ -296,6 +296,25 @@ const ProductDetail = () => {
                 )}
               </div>
 
+              {/* Bannière Produit Digital (Modèle Chariow) */}
+              {product.productType === 'DIGITAL' && (
+                <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200">
+                  <div className="flex items-center gap-2 text-purple-700 font-bold text-sm mb-1">
+                    <Zap size={18} className="fill-purple-600 text-purple-600" />
+                    <span>PRODUIT DIGITAL — LIVRAISON AUTOMATIQUE INSTANTANÉE</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-700">
+                    Accès immédiat ou téléchargement ({product.digitalType || 'Fichier digital'}) disponible tout de suite après confirmation de votre paiement. Zéro attente, aucun frais de livraison !
+                  </p>
+                  {product.digitalFileName && (
+                    <div className="mt-2 text-xs text-purple-700 bg-white/80 px-2.5 py-1 rounded inline-flex items-center gap-1.5 font-medium border border-purple-100">
+                      <Download size={13} />
+                      Fichier inclus : {product.digitalFileName}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Badge Affiliation */}
               {product.isAffiliate && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -355,7 +374,12 @@ const ProductDetail = () => {
               {/* Stock - Masqué pour produits affiliés */}
               {!product.isAffiliate && (
                 <div className="mb-4">
-                  {product.stock > 0 ? (
+                  {product.productType === 'DIGITAL' ? (
+                    <span className="inline-flex items-center gap-1.5 text-purple-700 bg-purple-50 px-3 py-1 rounded-full text-xs font-semibold border border-purple-200">
+                      <Zap size={14} className="fill-purple-500" />
+                      Disponible immédiatement 24h/24
+                    </span>
+                  ) : product.stock > 0 ? (
                     <span className="text-green-600 font-medium">
                       ✓ En stock ({product.stock} disponibles)
                     </span>
@@ -367,8 +391,8 @@ const ProductDetail = () => {
                 </div>
               )}
 
-              {/* Quantité - Masquée pour produits affiliés */}
-              {!product.isAffiliate && (
+              {/* Quantité - Masquée pour produits affiliés et produits digitaux */}
+              {!product.isAffiliate && product.productType !== 'DIGITAL' && (
                 <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
                   <span className="text-sm sm:text-base text-gray-600">Quantité :</span>
                   <div className="flex items-center border rounded">
@@ -404,11 +428,20 @@ const ProductDetail = () => {
                 ) : (
                   <button
                     onClick={handleAddToCart}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white py-2.5 sm:py-3 rounded font-medium flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white py-2.5 sm:py-3 rounded font-medium flex items-center justify-center gap-2 transition-colors text-sm sm:text-base shadow"
                   >
-                    <ShoppingCart size={18} className="sm:w-5 sm:h-5" />
-                    <span className="hidden xs:inline">Ajouter au panier</span>
-                    <span className="xs:hidden">Ajouter</span>
+                    {product.productType === 'DIGITAL' ? (
+                      <>
+                        <Download size={18} className="sm:w-5 sm:h-5" />
+                        <span>Acheter & Télécharger</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart size={18} className="sm:w-5 sm:h-5" />
+                        <span className="hidden xs:inline">Ajouter au panier</span>
+                        <span className="xs:hidden">Ajouter</span>
+                      </>
+                    )}
                   </button>
                 )}
                 <button className="px-3 sm:px-4 border border-orange-500 text-orange-500 hover:bg-orange-50 active:bg-orange-100 rounded font-medium transition-colors">
@@ -465,29 +498,55 @@ const ProductDetail = () => {
 
             {/* Avantages */}
             <div className="bg-white rounded shadow p-3 sm:p-4">
-              <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
-                  <Truck className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-xs sm:text-sm">Livraison rapide</p>
-                    <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Sous 24-48h</p>
+              {product.productType === 'DIGITAL' ? (
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <Zap className="text-purple-600 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Livraison 0s</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Téléchargement instantané</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <Shield className="text-purple-600 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Accès à vie</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Re-téléchargeable 24/7</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <RotateCcw className="text-purple-600 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Support client</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Assistance directe</p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
-                  <Shield className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-xs sm:text-sm">Garantie 1 an</p>
-                    <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Produit authentique</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <Truck className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Livraison rapide</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Sous 24-48h</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <Shield className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Garantie 1 an</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Produit authentique</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+                    <RotateCcw className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-xs sm:text-sm">Retour gratuit</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Sous 7 jours</p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
-                  <RotateCcw className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-xs sm:text-sm">Retour gratuit</p>
-                    <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Sous 7 jours</p>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

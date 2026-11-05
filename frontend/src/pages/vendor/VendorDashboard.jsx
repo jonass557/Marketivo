@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { Package, ShoppingCart, DollarSign, TrendingUp, Star, Eye, CreditCard, MessageCircle, ArrowUpRight } from 'lucide-react';
+import {
+  Package, ShoppingCart, DollarSign, TrendingUp, Star, Eye,
+  CreditCard, MessageCircle, ArrowUpRight, ShieldAlert, ShieldCheck,
+  Zap, Box, Download, FileText
+} from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../../config/api';
 import AuthContext from '../../context/AuthContext';
@@ -35,13 +39,15 @@ const VendorDashboard = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
       </div>
     );
   }
 
+  const kycStatus = stats?.kycStatus || vendorData?.kycStatus || 'NOT_SUBMITTED';
+
   const statCards = [
-    { label: 'Produits', value: stats?.totalProducts || 0, icon: Package, color: 'blue', link: '/vendor/dashboard/products' },
+    { label: 'Total Produits', value: stats?.totalProducts || 0, icon: Package, color: 'blue', link: '/vendor/dashboard/products' },
     { label: 'Commandes', value: stats?.totalOrders || 0, icon: ShoppingCart, color: 'green', link: '/vendor/dashboard/orders' },
     { label: 'Revenus nets', value: formatPrice(stats?.netRevenue), icon: DollarSign, color: 'orange', link: null },
     { label: 'Note moyenne', value: (stats?.rating || 0).toFixed(1), icon: Star, color: 'yellow', link: null },
@@ -56,20 +62,42 @@ const VendorDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Alerte statut */}
-      {vendorData?.status === 'PENDING' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3">
-          <Eye size={20} className="text-yellow-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <h3 className="font-semibold text-yellow-800">Boutique en attente de validation</h3>
-            <p className="text-yellow-700 text-sm mt-1">
-              Votre boutique est en cours de vérification par notre équipe. Vous serez notifié dès qu'elle sera approuvée.
-            </p>
+      {/* Alerte KYC (Cahier des charges: Retraits bloqués si non vérifié) */}
+      {kycStatus !== 'VERIFIED' && (
+        <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm ${
+          kycStatus === 'PENDING'
+            ? 'bg-amber-50 border-amber-200 text-amber-900'
+            : kycStatus === 'REJECTED'
+            ? 'bg-red-50 border-red-200 text-red-900'
+            : 'bg-blue-50 border-blue-200 text-blue-900'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-white/80 rounded-xl mt-0.5 flex-shrink-0">
+              <ShieldAlert size={22} className={kycStatus === 'REJECTED' ? 'text-red-600' : 'text-amber-600'} />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm">
+                {kycStatus === 'PENDING'
+                  ? 'Vérification d’identité (KYC) en cours d’examen'
+                  : kycStatus === 'REJECTED'
+                  ? 'Vérification KYC rejetée'
+                  : 'Vérification d’identité (KYC) requise'}
+              </h4>
+              <p className="text-xs opacity-90 mt-0.5">
+                Vous pouvez créer et vendre vos produits immédiatement. Cependant, conformément au règlement, vos <strong>retraits de fonds restent bloqués</strong> jusqu'à la validation de votre pièce d'identité et selfie.
+              </p>
+            </div>
           </div>
+          <Link
+            to="/vendor/dashboard/settings"
+            className="flex-shrink-0 bg-white text-gray-900 border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm text-center"
+          >
+            {kycStatus === 'PENDING' ? 'Voir mon dossier' : 'Fournir mes pièces KYC'}
+          </Link>
         </div>
       )}
 
-      {/* Stats Cards */}
+      {/* Stats Cards Principales */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((card, i) => {
           const Icon = card.icon;
@@ -91,6 +119,63 @@ const VendorDashboard = () => {
             <div key={i}>{content}</div>
           );
         })}
+      </div>
+
+      {/* MODÈLE HYBRIDE : RÉPARTITION PHYSIQUE (JUMIA) VS DIGITAL (CHARIOW) */}
+      <div className="bg-white rounded-2xl border p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-gray-900 flex items-center gap-2 text-base">
+            <TrendingUp size={20} className="text-orange-500" />
+            Performance Hybride (Digital & Physique)
+          </h3>
+          <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-full">
+            Chariow + Jumia
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Produits Digitaux (Modèle Chariow) */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-purple-600 text-white rounded-lg"><Zap size={16} /></span>
+                <h4 className="font-bold text-purple-900 text-sm">Produits Digitaux (Chariow)</h4>
+              </div>
+              <span className="text-xs text-purple-700 font-medium">Livraison instantanée</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-purple-100">
+              <div>
+                <p className="text-xs text-purple-600">Ventes digitales</p>
+                <p className="text-xl font-bold text-purple-900">{stats?.digitalSales || 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-purple-600">Chiffre d'affaires</p>
+                <p className="text-lg font-bold text-purple-900">{formatPrice(stats?.digitalRevenue)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Produits Physiques (Modèle Jumia) */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-blue-600 text-white rounded-lg"><Box size={16} /></span>
+                <h4 className="font-bold text-blue-900 text-sm">Produits Physiques (Jumia)</h4>
+              </div>
+              <span className="text-xs text-blue-700 font-medium">Expédition & Livraison</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-blue-100">
+              <div>
+                <p className="text-xs text-blue-600">Ventes physiques</p>
+                <p className="text-xl font-bold text-blue-900">{stats?.physicalSales || 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-blue-600">Chiffre d'affaires</p>
+                <p className="text-lg font-bold text-blue-900">{formatPrice(stats?.physicalRevenue)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Abonnement + Actions rapides */}
@@ -138,24 +223,24 @@ const VendorDashboard = () => {
           <h3 className="font-bold text-gray-800 mb-4">Actions rapides</h3>
           <div className="grid grid-cols-2 gap-3">
             <Link to="/vendor/dashboard/products/new"
-              className="flex flex-col items-center gap-2 p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
-              <Package size={24} className="text-blue-600" />
-              <span className="text-sm font-medium text-blue-700">Ajouter produit</span>
+              className="flex flex-col items-center gap-2 p-4 bg-orange-50 rounded-xl hover:bg-orange-100 transition-colors">
+              <Package size={24} className="text-orange-600" />
+              <span className="text-xs font-semibold text-orange-800">Ajouter produit</span>
             </Link>
             <Link to="/vendor/dashboard/orders"
               className="flex flex-col items-center gap-2 p-4 bg-green-50 rounded-xl hover:bg-green-100 transition-colors">
               <ShoppingCart size={24} className="text-green-600" />
-              <span className="text-sm font-medium text-green-700">Voir commandes</span>
+              <span className="text-xs font-semibold text-green-800">Voir commandes</span>
             </Link>
-            <Link to="/vendor/dashboard/messages"
+            <Link to="/vendor/dashboard/settings"
               className="flex flex-col items-center gap-2 p-4 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors">
-              <MessageCircle size={24} className="text-purple-600" />
-              <span className="text-sm font-medium text-purple-700">Messages</span>
+              <ShieldCheck size={24} className="text-purple-600" />
+              <span className="text-xs font-semibold text-purple-800">Vérification KYC</span>
             </Link>
             <Link to="/vendor/dashboard/subscription"
-              className="flex flex-col items-center gap-2 p-4 bg-orange-50 rounded-xl hover:bg-orange-100 transition-colors">
-              <TrendingUp size={24} className="text-orange-600" />
-              <span className="text-sm font-medium text-orange-700">Upgrade plan</span>
+              className="flex flex-col items-center gap-2 p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
+              <TrendingUp size={24} className="text-blue-600" />
+              <span className="text-xs font-semibold text-blue-800">Upgrade plan</span>
             </Link>
           </div>
         </div>
@@ -171,7 +256,7 @@ const VendorDashboard = () => {
           </div>
           <div className="p-3 bg-green-50 rounded-xl">
             <p className="text-2xl font-bold text-green-600">{stats?.deliveredOrders || 0}</p>
-            <p className="text-xs text-green-700 mt-1">Livrées</p>
+            <p className="text-xs text-green-700 mt-1">Livrées / Accédées</p>
           </div>
           <div className="p-3 bg-red-50 rounded-xl">
             <p className="text-2xl font-bold text-red-600">{formatPrice(stats?.totalCommission)}</p>

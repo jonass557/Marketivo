@@ -104,6 +104,7 @@ function App() {
                     <Route path="/vendor/register" element={<PublicLayout><VendorRegister /></PublicLayout>} />
                     <Route path="/vendors" element={<PublicLayout><VendorsList /></PublicLayout>} />
                     <Route path="/shop/:slug" element={<PublicLayout><VendorShop /></PublicLayout>} />
+                    <Route path="/boutique/:slug" element={<PublicLayout><VendorShop /></PublicLayout>} />
                     <Route path="/messages" element={<PublicLayout><Messages /></PublicLayout>} />
 
                     {/* Vendor Dashboard Routes */}

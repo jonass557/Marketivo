@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Settings = require('../models/Settings');
 const Order = require('../models/Order');
+const Vendor = require('../models/Vendor');
 const axios = require('axios');
 
 // ============================================
@@ -562,6 +563,15 @@ const ikeepayWebhook = asyncHandler(async (req, res) => {
 // @access  Private
 const initiateIkeepayPayout = asyncHandler(async (req, res) => {
   const { amount, currency, country, phoneNumber, operator, reference } = req.body;
+
+  // Si c'est un vendeur qui demande un retrait, vérification KYC obligatoire
+  if (req.user?.role === 'VENDOR') {
+    const vendor = await Vendor.findOne({ user: req.user._id });
+    if (vendor && (vendor.kycStatus !== 'VERIFIED' || vendor.payoutsBlocked)) {
+      res.status(403);
+      throw new Error('Retraits bloqués : Votre identité (KYC) doit être vérifiée et approuvée par l\'administrateur avant de pouvoir retirer des fonds.');
+    }
+  }
 
   const settings = await Settings.findById('main');
   if (!settings?.enableIkeepay || !settings?.ikeepaySecretKey) {

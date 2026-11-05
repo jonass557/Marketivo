@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Heart, ShoppingCart, ExternalLink, Store } from 'lucide-react';
+import { Star, Heart, ShoppingCart, ExternalLink, Store, Zap, Download } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
@@ -10,7 +10,25 @@ const ProductCard = ({ product }) => {
   const { addToCart } = useContext(CartContext);
   const toast = useToast();
   const { formatPrice } = useSettings();
-  const { id, name, price, oldPrice, images, image, rating, reviews, reviewCount, discount, stock, isAffiliate, affiliateUrl } = product;
+  const {
+    id,
+    name,
+    price,
+    oldPrice,
+    images,
+    image,
+    rating,
+    reviews,
+    reviewCount,
+    discount,
+    stock,
+    isAffiliate,
+    affiliateUrl,
+    productType,
+    digitalType
+  } = product;
+
+  const isDigital = productType === 'DIGITAL';
   
   // Gérer les favoris (wishlist)
   const [isInWishlist, setIsInWishlist] = useState(false);
@@ -97,7 +115,14 @@ const ProductCard = ({ product }) => {
             e.currentTarget.src = FALLBACK_IMAGE_SVG;
           }}
         />
-        {discount && (
+        {/* Badge Produit Digital (Modèle Chariow) */}
+        {isDigital && (
+          <span className="absolute top-2 left-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[10px] sm:text-xs font-bold px-2 py-1 rounded z-10 flex items-center gap-1 shadow">
+            <Zap size={11} className="fill-current text-yellow-300" />
+            Digital
+          </span>
+        )}
+        {!isDigital && discount && (
           <span className="absolute top-2 left-2 bg-theme-primary text-white text-xs font-bold px-2 py-1 rounded">
             -{discount}%
           </span>
@@ -109,13 +134,13 @@ const ProductCard = ({ product }) => {
             Partenaire
           </span>
         )}
-        {/* Badge Stock - Masqué pour affiliés */}
-        {!isAffiliate && isOutOfStock && (
+        {/* Badge Stock - Masqué pour produits digitaux et affiliés */}
+        {!isDigital && !isAffiliate && isOutOfStock && (
           <span className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-10">
             Rupture
           </span>
         )}
-        {!isAffiliate && !isOutOfStock && stock !== undefined && stock <= 5 && stock > 0 && (
+        {!isDigital && !isAffiliate && !isOutOfStock && stock !== undefined && stock <= 5 && stock > 0 && (
           <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded z-10">
             Stock limité
           </span>
@@ -175,8 +200,13 @@ const ProductCard = ({ product }) => {
           <span className="text-xs text-gray-500">({displayReviewCount})</span>
         </div>
         
-        {/* Statut stock - Masqué pour affiliés */}
-        {!isAffiliate && (
+        {/* Statut digital / stock */}
+        {isDigital ? (
+          <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-purple-600">
+            <Download size={11} />
+            <span>Téléchargement immédiat</span>
+          </div>
+        ) : !isAffiliate ? (
           <div className="mt-1">
             {isOutOfStock ? (
               <span className="text-xs font-medium text-red-500">Rupture de stock</span>
@@ -184,7 +214,7 @@ const ProductCard = ({ product }) => {
               <span className="text-xs font-medium text-green-600">En stock</span>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Statut affilié */}
         {isAffiliate && (

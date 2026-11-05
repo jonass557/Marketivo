@@ -26,7 +26,18 @@ const orderItemSchema = new mongoose.Schema({
   commissionAmount: {
     type: Number,
     default: 0
-  }
+  },
+  // Type de produit (Physique vs Digital)
+  productType: {
+    type: String,
+    enum: ['PHYSICAL', 'DIGITAL'],
+    default: 'PHYSICAL'
+  },
+  digitalType: String,
+  digitalFileUrl: String,
+  digitalFileName: String,
+  digitalAccessLink: String,
+  digitalInstructions: String
 });
 
 const orderSchema = new mongoose.Schema({
@@ -39,6 +50,15 @@ const orderSchema = new mongoose.Schema({
   totalAmount: {
     type: Number,
     required: true
+  },
+  // Commande hybride : physique ou digitale
+  isDigitalOnly: {
+    type: Boolean,
+    default: false
+  },
+  hasDigitalItems: {
+    type: Boolean,
+    default: false
   },
   status: {
     type: String,

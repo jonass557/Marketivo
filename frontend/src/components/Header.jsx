@@ -115,6 +115,7 @@ const Header = () => {
                     <>
                       <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100">Mon compte</Link>
                       <Link to="/orders" className="block px-4 py-2 hover:bg-gray-100">Mes commandes</Link>
+                      <Link to="/orders" className="block px-4 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-xs">⚡ Bibliothèque Digitale</Link>
                       <Link to="/messages" className="block px-4 py-2 hover:bg-gray-100">Messages</Link>
                       {user.role === 'VENDOR' && (
                         <Link to="/vendor/dashboard" className="block px-4 py-2 hover:bg-gray-100 text-blue-600">Ma Boutique</Link>

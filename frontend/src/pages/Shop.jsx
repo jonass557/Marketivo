@@ -42,6 +42,7 @@ const Shop = () => {
   const [sortBy, setSortBy] = useState('popular');
   const [priceRange, setPriceRange] = useState([0, 2000000]);
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || '');
+  const [selectedType, setSelectedType] = useState((searchParams.get('type') || 'ALL').toUpperCase());
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [currentPage, setCurrentPage] = useState(1);
   const productsPerPage = 12;
@@ -84,6 +85,9 @@ const Shop = () => {
   useEffect(() => {
     setSearchQuery(searchParams.get('search') || '');
     setSelectedCategory(searchParams.get('category') || '');
+    if (searchParams.get('type')) {
+      setSelectedType(searchParams.get('type').toUpperCase());
+    }
   }, [searchParams]);
 
   // Filtrer les produits
@@ -96,7 +100,13 @@ const Shop = () => {
     const matchesSearch = !searchQuery || productName.includes(query) || productDescription.includes(query);
     const matchesCategory = !selectedCategory || selectedCategory === 'Tous' || productCategory === selectedCategory;
     const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
-    return matchesSearch && matchesCategory && matchesPrice;
+
+    const isProductDigital = product.productType === 'DIGITAL';
+    const matchesType = !selectedType || selectedType === 'ALL' ||
+      (selectedType === 'DIGITAL' && isProductDigital) ||
+      (selectedType === 'PHYSICAL' && !isProductDigital);
+
+    return matchesSearch && matchesCategory && matchesPrice && matchesType;
   });
 
   // Trier les produits
@@ -140,21 +150,45 @@ const Shop = () => {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar Filtres - Desktop */}
           <aside className="hidden lg:block w-64 flex-shrink-0">
-            <div className="bg-white rounded shadow p-4 sticky top-32">
-              <h2 className="font-bold text-lg mb-4">Filtres</h2>
+            <div className="bg-white rounded-xl shadow-sm border p-4 sticky top-28 space-y-6">
+              <h2 className="font-bold text-lg text-gray-800">Filtres</h2>
+
+              {/* Type de produit (Hybride Chariow + Jumia) */}
+              <div>
+                <h3 className="font-semibold text-sm text-gray-700 mb-2.5">Modèle de produit</h3>
+                <div className="space-y-1.5">
+                  {[
+                    { id: 'ALL', label: 'Tous les produits' },
+                    { id: 'DIGITAL', label: '⚡ Digitaux (Chariow)' },
+                    { id: 'PHYSICAL', label: '📦 Physiques (Jumia)' }
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedType(t.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all font-medium ${
+                        selectedType === t.id
+                          ? 'bg-purple-600 text-white shadow'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Catégories */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3">Catégories</h3>
-                <ul className="space-y-2">
+              <div>
+                <h3 className="font-semibold text-sm text-gray-700 mb-2.5">Catégories</h3>
+                <ul className="space-y-1 max-h-56 overflow-y-auto pr-1">
                   {categories.map((cat) => (
                     <li key={cat}>
                       <button
                         onClick={() => setSelectedCategory(cat === 'Tous' ? '' : cat)}
-                        className={`w-full text-left px-3 py-2 rounded transition-colors ${
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
                           (cat === 'Tous' && !selectedCategory) || selectedCategory === cat
-                            ? 'bg-orange-500 text-white'
-                            : 'hover:bg-gray-100'
+                            ? 'bg-orange-500 text-white font-medium'
+                            : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
                         {cat}
@@ -165,8 +199,8 @@ const Shop = () => {
               </div>
 
               {/* Prix */}
-              <div className="mb-6">
-                <h3 className="font-semibold mb-3">Prix (XAF)</h3>
+              <div>
+                <h3 className="font-semibold text-sm text-gray-700 mb-2.5">Prix (XAF)</h3>
                 <div className="space-y-2">
                   <input
                     type="range"
@@ -177,7 +211,7 @@ const Shop = () => {
                     onChange={(e) => setPriceRange([0, parseInt(e.target.value)])}
                     className="w-full accent-orange-500"
                   />
-                  <div className="flex justify-between text-sm text-gray-600">
+                  <div className="flex justify-between text-xs text-gray-500">
                     <span>0 XAF</span>
                     <span>{formatPrice(priceRange[1])}</span>
                   </div>
@@ -188,9 +222,10 @@ const Shop = () => {
               <button
                 onClick={() => {
                   setSelectedCategory('');
+                  setSelectedType('ALL');
                   setPriceRange([0, 2000000]);
                 }}
-                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded transition-colors"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium transition-colors"
               >
                 Réinitialiser
               </button>
@@ -199,6 +234,28 @@ const Shop = () => {
 
           {/* Contenu principal */}
           <main className="flex-1">
+            {/* Onglets rapides Type de produit */}
+            <div className="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
+              {[
+                { id: 'ALL', label: 'Tous', desc: 'Tout le catalogue' },
+                { id: 'DIGITAL', label: '⚡ Produits Digitaux', desc: 'Ebooks, Formations, Templates' },
+                { id: 'PHYSICAL', label: '📦 Produits Physiques', desc: 'Livraison partout au Cameroun' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedType(tab.id)}
+                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+                    selectedType === tab.id
+                      ? tab.id === 'DIGITAL'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-orange-500 text-white shadow-md'
+                      : 'bg-white text-gray-700 border hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
             {/* En-tête */}
             <div className="bg-white rounded shadow p-3 sm:p-4 mb-3 sm:mb-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">

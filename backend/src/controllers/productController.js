@@ -19,9 +19,15 @@ const generateSlug = (name) => {
 // @route   GET /api/products
 // @access  Public
 const getProducts = asyncHandler(async (req, res) => {
-  const { category, search, minPrice, maxPrice, sort, page = 1, limit = 20 } = req.query;
+  const { category, search, minPrice, maxPrice, sort, page = 1, limit = 20, productType, type } = req.query;
 
   let query = {};
+
+  // Filtre par type de produit (Physique / Jumia ou Digital / Chariow)
+  const requestedType = (productType || type || '').toUpperCase();
+  if (requestedType === 'PHYSICAL' || requestedType === 'DIGITAL') {
+    query.productType = requestedType;
+  }
 
   // Filtre par catégorie
   if (category) {
@@ -129,9 +135,29 @@ const getProductById = asyncHandler(async (req, res) => {
 // @route   POST /api/products
 // @access  Private/Admin or Vendor
 const createProduct = asyncHandler(async (req, res) => {
-  const { name, description, price, oldPrice, brand, size, stock, categoryId, images, isPopular, isAffiliate, affiliateUrl } = req.body;
+  const {
+    name,
+    description,
+    price,
+    oldPrice,
+    brand,
+    size,
+    stock,
+    categoryId,
+    images,
+    isPopular,
+    isAffiliate,
+    affiliateUrl,
+    productType = 'PHYSICAL',
+    digitalType = 'EBOOK',
+    digitalFileUrl = '',
+    digitalFileName = '',
+    digitalFileSize = '',
+    digitalAccessLink = '',
+    digitalInstructions = ''
+  } = req.body;
 
-  console.log('Création produit:', { name, categoryId, price });
+  console.log('Création produit:', { name, categoryId, price, productType });
 
   if (!name || !description || !price || !categoryId) {
     res.status(400);
@@ -184,6 +210,9 @@ const createProduct = asyncHandler(async (req, res) => {
     counter++;
   }
 
+  const isDigital = productType === 'DIGITAL';
+  const effectiveStock = isDigital ? 999999 : (isAffiliate ? 999 : (parseInt(stock) || 0));
+
   try {
     const product = await Product.create({
       name,
@@ -193,12 +222,19 @@ const createProduct = asyncHandler(async (req, res) => {
       oldPrice: oldPrice ? parseFloat(oldPrice) : null,
       brand: brand || null,
       size: size || null,
-      stock: isAffiliate ? 999 : (parseInt(stock) || 0),
+      stock: effectiveStock,
       category: categoryId,
       images: images || [],
       isPopular: isPopular || false,
       isAffiliate: isAffiliate || false,
       affiliateUrl: affiliateUrl || null,
+      productType: isDigital ? 'DIGITAL' : 'PHYSICAL',
+      digitalType: digitalType || 'EBOOK',
+      digitalFileUrl: digitalFileUrl || '',
+      digitalFileName: digitalFileName || '',
+      digitalFileSize: digitalFileSize || '',
+      digitalAccessLink: digitalAccessLink || '',
+      digitalInstructions: digitalInstructions || '',
       vendor: vendorId,
       visibilityScore,
       isApproved: req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN' ? true : true
@@ -219,8 +255,27 @@ const createProduct = asyncHandler(async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private/Admin
 const updateProduct = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name, description, price, oldPrice, brand, size, stock, categoryId, images, isPopular, isAffiliate, affiliateUrl } = req.body;
+  const {
+    name,
+    description,
+    price,
+    oldPrice,
+    brand,
+    size,
+    stock,
+    categoryId,
+    images,
+    isPopular,
+    isAffiliate,
+    affiliateUrl,
+    productType,
+    digitalType,
+    digitalFileUrl,
+    digitalFileName,
+    digitalFileSize,
+    digitalAccessLink,
+    digitalInstructions
+  } = req.body;
 
   const existingProduct = await Product.findById(id);
 
@@ -255,12 +310,24 @@ const updateProduct = asyncHandler(async (req, res) => {
   existingProduct.oldPrice = oldPrice !== undefined ? (oldPrice ? parseFloat(oldPrice) : null) : existingProduct.oldPrice;
   existingProduct.brand = brand !== undefined ? brand : existingProduct.brand;
   existingProduct.size = size !== undefined ? size : existingProduct.size;
-  existingProduct.stock = stock !== undefined ? parseInt(stock) : existingProduct.stock;
+  if (productType === 'DIGITAL') {
+    existingProduct.stock = 999999;
+  } else if (stock !== undefined) {
+    existingProduct.stock = parseInt(stock);
+  }
   existingProduct.category = categoryId || existingProduct.category;
   existingProduct.images = images !== undefined ? images : existingProduct.images;
   existingProduct.isPopular = isPopular !== undefined ? isPopular : existingProduct.isPopular;
   existingProduct.isAffiliate = isAffiliate !== undefined ? isAffiliate : existingProduct.isAffiliate;
   existingProduct.affiliateUrl = affiliateUrl !== undefined ? affiliateUrl : existingProduct.affiliateUrl;
+
+  if (productType !== undefined) existingProduct.productType = productType;
+  if (digitalType !== undefined) existingProduct.digitalType = digitalType;
+  if (digitalFileUrl !== undefined) existingProduct.digitalFileUrl = digitalFileUrl;
+  if (digitalFileName !== undefined) existingProduct.digitalFileName = digitalFileName;
+  if (digitalFileSize !== undefined) existingProduct.digitalFileSize = digitalFileSize;
+  if (digitalAccessLink !== undefined) existingProduct.digitalAccessLink = digitalAccessLink;
+  if (digitalInstructions !== undefined) existingProduct.digitalInstructions = digitalInstructions;
 
   await existingProduct.save();
   

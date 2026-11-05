@@ -34,9 +34,8 @@ const createOrder = asyncHandler(async (req, res) => {
 
   // Calculer le total et les commissions par vendeur
   const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-  const total = subtotal + shippingCost;
 
-  // Enrichir les items avec les informations vendeur et commission
+  // Enrichir les items avec les informations vendeur, commission et métadonnées digitales
   let totalCommission = 0;
   const enrichedItems = await Promise.all(items.map(async (item) => {
     const product = await Product.findById(item.productId).populate('vendor');
@@ -44,23 +43,41 @@ const createOrder = asyncHandler(async (req, res) => {
     let commission = 0;
     let commissionAmount = 0;
 
-    if (product && product.vendor) {
-      vendorId = product.vendor._id;
-      const vendor = await Vendor.findById(vendorId);
+    let isItemDigital = false;
+    let digitalType = '';
+    let digitalFileUrl = '';
+    let digitalFileName = '';
+    let digitalAccessLink = '';
+    let digitalInstructions = '';
 
-      // Déterminer le taux de commission
-      if (vendor && vendor.commissionOverride !== null && vendor.commissionOverride !== undefined) {
-        commission = vendor.commissionOverride;
-      } else {
-        // Utiliser la commission de l'abonnement actif
-        const subscription = await UserSubscription.findOne({ vendor: vendorId, status: 'ACTIVE' });
-        if (subscription) {
-          commission = subscription.planSnapshot.commission || 0;
-        }
+    if (product) {
+      if (product.productType === 'DIGITAL') {
+        isItemDigital = true;
+        digitalType = product.digitalType || 'EBOOK';
+        digitalFileUrl = product.digitalFileUrl || '';
+        digitalFileName = product.digitalFileName || '';
+        digitalAccessLink = product.digitalAccessLink || '';
+        digitalInstructions = product.digitalInstructions || '';
       }
 
-      commissionAmount = Math.round((item.price * item.quantity * commission) / 100);
-      totalCommission += commissionAmount;
+      if (product.vendor) {
+        vendorId = product.vendor._id;
+        const vendor = await Vendor.findById(vendorId);
+
+        // Déterminer le taux de commission
+        if (vendor && vendor.commissionOverride !== null && vendor.commissionOverride !== undefined) {
+          commission = vendor.commissionOverride;
+        } else {
+          // Utiliser la commission de l'abonnement actif
+          const subscription = await UserSubscription.findOne({ vendor: vendorId, status: 'ACTIVE' });
+          if (subscription) {
+            commission = subscription.planSnapshot.commission || 0;
+          }
+        }
+
+        commissionAmount = Math.round((item.price * item.quantity * commission) / 100);
+        totalCommission += commissionAmount;
+      }
     }
 
     return {
@@ -69,22 +86,35 @@ const createOrder = asyncHandler(async (req, res) => {
       quantity: item.quantity,
       price: item.price,
       commission,
-      commissionAmount
+      commissionAmount,
+      productType: isItemDigital ? 'DIGITAL' : 'PHYSICAL',
+      digitalType,
+      digitalFileUrl,
+      digitalFileName,
+      digitalAccessLink,
+      digitalInstructions
     };
   }));
+
+  const hasDigitalItems = enrichedItems.some(i => i.productType === 'DIGITAL');
+  const isDigitalOnly = enrichedItems.length > 0 && enrichedItems.every(i => i.productType === 'DIGITAL');
+  const actualShippingCost = isDigitalOnly ? 0 : shippingCost;
+  const total = subtotal + actualShippingCost;
 
   // Créer la commande
   const order = await Order.create({
     user: req.user._id,
     totalAmount: total,
-    shippingAddress,
-    city,
-    phone,
+    shippingAddress: shippingAddress || (isDigitalOnly ? 'Livraison numérique instantanée' : 'Non spécifiée'),
+    city: city || (isDigitalOnly ? 'En ligne' : ''),
+    phone: phone || req.user.phone || '',
     paymentMethod: paymentMethod || 'cod',
     notes,
     status: 'PENDING',
     items: enrichedItems,
-    totalCommission
+    totalCommission,
+    hasDigitalItems,
+    isDigitalOnly
   });
 
   // Populate pour la réponse
@@ -312,9 +342,55 @@ const deleteOrder = asyncHandler(async (req, res) => {
   res.json({ message: 'Commande supprimée' });
 });
 
+// @desc    Get user's purchased digital products
+// @route   GET /api/orders/my-digital-downloads
+// @access  Private
+const getMyDigitalDownloads = asyncHandler(async (req, res) => {
+  const orders = await Order.find({
+    user: req.user._id,
+    $or: [
+      { paymentStatus: 'PAID' },
+      { status: 'DELIVERED' },
+      { status: 'CONFIRMED' }
+    ]
+  }).populate('items.product').sort({ createdAt: -1 });
+
+  const downloads = [];
+
+  orders.forEach(order => {
+    order.items.forEach(item => {
+      const isDigital = item.productType === 'DIGITAL' || item.product?.productType === 'DIGITAL';
+      if (isDigital) {
+        const prod = item.product || {};
+        const prodId = (prod._id || item.product || '').toString();
+
+        downloads.push({
+          orderId: order._id,
+          orderDate: order.createdAt,
+          paymentStatus: order.paymentStatus,
+          orderStatus: order.status,
+          productId: prodId,
+          name: prod.name || 'Produit Digital',
+          image: prod.images?.[0] || prod.image || '',
+          price: item.price,
+          quantity: item.quantity,
+          digitalType: item.digitalType || prod.digitalType || 'EBOOK',
+          downloadUrl: item.digitalFileUrl || prod.digitalFileUrl || '',
+          fileName: item.digitalFileName || prod.digitalFileName || `${prod.name || 'produit'}.pdf`,
+          accessLink: item.digitalAccessLink || prod.digitalAccessLink || '',
+          instructions: item.digitalInstructions || prod.digitalInstructions || ''
+        });
+      }
+    });
+  });
+
+  res.json(downloads);
+});
+
 module.exports = {
   createOrder,
   getMyOrders,
+  getMyDigitalDownloads,
   getOrderById,
   getAllOrders,
   updateOrderStatus,

@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw, Zap, Download } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -69,8 +69,12 @@ const Checkout = () => {
     paymentMethod: savedData?.paymentMethod || ''
   });
 
-  // Calculer les frais de livraison selon les paramètres
-  const enableShipping = settings?.enableShipping !== false;
+  // Hybride Chariow + Jumia : détection des produits digitaux
+  const isDigitalOnly = cartItems.length > 0 && cartItems.every(item => item.productType === 'DIGITAL');
+  const hasDigitalItems = cartItems.some(item => item.productType === 'DIGITAL');
+
+  // Calculer les frais de livraison selon les paramètres (0 FCFA si panier 100% digital)
+  const enableShipping = !isDigitalOnly && settings?.enableShipping !== false;
   const shippingCost = enableShipping ? (settings?.defaultShippingFee || 2000) : 0;
   const subtotal = cartTotal;
   const total = subtotal + shippingCost;
@@ -120,11 +124,11 @@ const Checkout = () => {
       setError('Veuillez entrer votre numéro de téléphone');
       return;
     }
-    if (!formData.address.trim()) {
+    if (!isDigitalOnly && !formData.address.trim()) {
       setError('Veuillez entrer votre adresse de livraison');
       return;
     }
-    if (!formData.city) {
+    if (!isDigitalOnly && !formData.city) {
       setError('Veuillez sélectionner votre ville');
       return;
     }
@@ -145,18 +149,27 @@ const Checkout = () => {
         productId: item.id,
         name: item.name,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        productType: item.productType || 'PHYSICAL',
+        digitalType: item.digitalType,
+        digitalFileUrl: item.digitalFileUrl,
+        digitalFileName: item.digitalFileName,
+        digitalAccessLink: item.digitalAccessLink,
+        digitalInstructions: item.digitalInstructions
       }));
 
       const config = {
         headers: { Authorization: `Bearer ${user.token}` }
       };
 
+      const finalAddress = isDigitalOnly ? (formData.address?.trim() || 'Livraison Numérique Instantanée') : formData.address;
+      const finalCity = isDigitalOnly ? (formData.city || 'Numérique') : formData.city;
+
       // Créer la commande
       const { data } = await axios.post(`${API_URL}/api/orders`, {
         items: orderItems,
-        shippingAddress: formData.address,
-        city: formData.city,
+        shippingAddress: finalAddress,
+        city: finalCity,
         phone: formData.phone,
         paymentMethod: formData.paymentMethod,
         shippingCost,
@@ -167,7 +180,7 @@ const Checkout = () => {
       setCreatedOrderId(orderId);
 
       // Sauvegarder les produits commandés pour les avis
-      setOrderedProducts(cartItems.map(item => ({ id: item.id, name: item.name, image: item.images?.[0] || item.image })));
+      setOrderedProducts(cartItems.map(item => ({ id: item.id, name: item.name, image: item.images?.[0] || item.image, productType: item.productType, digitalFileUrl: item.digitalFileUrl, digitalAccessLink: item.digitalAccessLink })));
       
       // Traiter le paiement selon la méthode choisie
       if (formData.paymentMethod === 'ikeepay') {
@@ -479,6 +492,41 @@ const Checkout = () => {
             <p className="text-gray-500 mb-6">
               Votre commande #{orderSuccess.order?.id?.slice(0, 8)} a été enregistrée avec succès.
             </p>
+
+            {/* Blocs de téléchargement instantané (Modèle Chariow) */}
+            {hasDigitalItems && (
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 mb-6 text-left space-y-3 shadow-sm">
+                <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
+                  <Zap size={18} className="text-purple-600" />
+                  Vos produits digitaux sont prêts (Modèle Chariow)
+                </div>
+                <p className="text-xs text-purple-700">
+                  Accédez immédiatement à vos téléchargements ou retrouvez-les à tout moment dans votre compte :
+                </p>
+                <div className="space-y-2">
+                  {orderedProducts.filter(p => p.productType === 'DIGITAL').map((prod, idx) => (
+                    <div key={idx} className="bg-white p-3 rounded-lg border border-purple-200 flex items-center justify-between gap-2 text-xs">
+                      <span className="font-semibold text-gray-800 truncate">{prod.name}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {prod.digitalFileUrl && (
+                          <a href={prod.digitalFileUrl} target="_blank" rel="noopener noreferrer" download className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors">
+                            <Download size={12} /> Télécharger
+                          </a>
+                        )}
+                        {prod.digitalAccessLink && (
+                          <a href={prod.digitalAccessLink} target="_blank" rel="noopener noreferrer" className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors">
+                            <ExternalLink size={12} /> Accéder
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Link to="/orders" className="block text-center text-xs font-bold text-purple-700 hover:underline pt-1">
+                  Accéder à ma Bibliothèque Digitale complète →
+                </Link>
+              </div>
+            )}
             
             <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
               <h3 className="font-semibold mb-2">Récapitulatif</h3>
@@ -666,8 +714,18 @@ const Checkout = () => {
               <div className="bg-white rounded-xl shadow p-6">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                   <MapPin className="text-orange-500" size={20} />
-                  Informations de livraison
+                  {isDigitalOnly ? 'Informations de l\'acheteur (Livraison digitale)' : 'Informations de livraison'}
                 </h2>
+
+                {isDigitalOnly && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 mb-4 flex items-center gap-3">
+                    <Zap size={20} className="text-purple-600 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-xs text-purple-900">Commande 100% Digitale (Modèle Chariow)</h4>
+                      <p className="text-[11px] text-purple-700">Aucun frais de port. Les fichiers et liens d'accès seront disponibles instantanément après paiement.</p>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -683,7 +741,7 @@ const Checkout = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email * (pour réception des accès)</label>
                     <input
                       type="email"
                       name="email"
@@ -697,7 +755,7 @@ const Checkout = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       <Phone size={14} className="inline mr-1" />
-                      Téléphone *
+                      Téléphone Mobile Money *
                     </label>
                     <input
                       type="tel"
@@ -710,35 +768,39 @@ const Checkout = () => {
                     />
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Ville *</label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    >
-                      <option value="Douala">Douala</option>
-                      <option value="Yaoundé">Yaoundé</option>
-                      <option value="Bafoussam">Bafoussam</option>
-                      <option value="Bamenda">Bamenda</option>
-                      <option value="Garoua">Garoua</option>
-                      <option value="Maroua">Maroua</option>
-                    </select>
-                  </div>
+                  {!isDigitalOnly && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Ville *</label>
+                      <select
+                        name="city"
+                        value={formData.city}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      >
+                        <option value="Douala">Douala</option>
+                        <option value="Yaoundé">Yaoundé</option>
+                        <option value="Bafoussam">Bafoussam</option>
+                        <option value="Bamenda">Bamenda</option>
+                        <option value="Garoua">Garoua</option>
+                        <option value="Maroua">Maroua</option>
+                      </select>
+                    </div>
+                  )}
                   
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Adresse de livraison *</label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleChange}
-                      placeholder="Quartier, rue, repère..."
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      required
-                    />
-                  </div>
+                  {!isDigitalOnly && (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Adresse de livraison physique *</label>
+                      <input
+                        type="text"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleChange}
+                        placeholder="Quartier, rue, repère..."
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        required={!isDigitalOnly}
+                      />
+                    </div>
+                  )}
                   
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optionnel)</label>
@@ -905,7 +967,7 @@ const Checkout = () => {
               <div className="lg:hidden">
                 <button
                   type="submit"
-                  disabled={loading || paymentLoading || !formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.paymentMethod}
+                  disabled={loading || paymentLoading || !formData.fullName || !formData.email || !formData.phone || (!isDigitalOnly && !formData.address) || !formData.paymentMethod}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading || paymentLoading ? (
@@ -914,7 +976,7 @@ const Checkout = () => {
                       {paymentLoading ? 'Paiement en cours...' : 'Traitement...'}
                     </>
                   ) : (
-                    'Confirmer la commande'
+                    isDigitalOnly ? 'Payer & Télécharger' : 'Confirmer la commande'
                   )}
                 </button>
               </div>
@@ -971,7 +1033,7 @@ const Checkout = () => {
               {/* Bouton de validation (desktop) */}
               <button
                 onClick={handleSubmit}
-                disabled={loading || paymentLoading || !formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.paymentMethod}
+                disabled={loading || paymentLoading || !formData.fullName || !formData.email || !formData.phone || (!isDigitalOnly && !formData.address) || !formData.paymentMethod}
                 className="hidden lg:flex w-full mt-6 bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed items-center justify-center gap-2"
               >
                 {loading || paymentLoading ? (
@@ -980,11 +1042,11 @@ const Checkout = () => {
                     {paymentLoading ? 'Paiement en cours...' : 'Traitement...'}
                   </>
                 ) : (
-                  'Confirmer la commande'
+                  isDigitalOnly ? 'Payer & Télécharger' : 'Confirmer la commande'
                 )}
               </button>
 
-              {(!formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.paymentMethod) && (
+              {(!formData.fullName || !formData.email || !formData.phone || (!isDigitalOnly && !formData.address) || !formData.paymentMethod) && (
                 <p className="text-xs text-red-500 text-center mt-2">
                   Veuillez remplir tous les champs obligatoires
                 </p>

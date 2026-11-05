@@ -8,7 +8,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// @desc    Upload image to Cloudinary
+// @desc    Upload image or document to Cloudinary
 // @route   POST /api/upload
 // @access  Private
 const uploadImage = asyncHandler(async (req, res) => {
@@ -22,7 +22,7 @@ const uploadImage = asyncHandler(async (req, res) => {
     const b64 = Buffer.from(req.file.buffer).toString('base64');
     const dataURI = `data:${req.file.mimetype};base64,${b64}`;
 
-    // Upload to Cloudinary
+    // Upload to Cloudinary (resource_type: 'auto' handles images, PDFs, archives, etc.)
     const result = await cloudinary.uploader.upload(dataURI, {
       folder: 'myshop',
       resource_type: 'auto'
@@ -30,12 +30,47 @@ const uploadImage = asyncHandler(async (req, res) => {
 
     res.json({
       url: result.secure_url,
-      public_id: result.public_id
+      public_id: result.public_id,
+      name: req.file.originalname,
+      size: req.file.size
     });
   } catch (error) {
     console.error('Cloudinary error:', error);
     res.status(500);
-    throw new Error('Erreur lors de l\'upload de l\'image');
+    throw new Error('Erreur lors de l\'upload du fichier');
+  }
+});
+
+// @desc    Upload digital product or KYC document
+// @route   POST /api/upload/file
+// @access  Private
+const uploadFile = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400);
+    throw new Error('Aucun fichier fourni');
+  }
+
+  try {
+    const b64 = Buffer.from(req.file.buffer).toString('base64');
+    const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+
+    const result = await cloudinary.uploader.upload(dataURI, {
+      folder: 'myshop/digital',
+      resource_type: 'auto',
+      use_filename: true
+    });
+
+    res.json({
+      url: result.secure_url,
+      public_id: result.public_id,
+      name: req.file.originalname,
+      size: req.file.size,
+      mimeType: req.file.mimetype
+    });
+  } catch (error) {
+    console.error('Upload file error:', error);
+    res.status(500);
+    throw new Error('Erreur lors de l\'upload du fichier digital');
   }
 });
 
@@ -52,4 +87,4 @@ const deleteImage = asyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { uploadImage, deleteImage };
+module.exports = { uploadImage, uploadFile, deleteImage };

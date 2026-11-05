@@ -178,7 +178,7 @@ const updateVendorProfile = asyncHandler(async (req, res) => {
     throw new Error('Profil vendeur non trouvé');
   }
 
-  const { shopName, description, logo, banner, phone, whatsapp, address, city, country, socialLinks, acceptedPayments } = req.body;
+  const { shopName, description, logo, banner, phone, whatsapp, address, city, country, socialLinks, acceptedPayments, accentColor, tagline, theme } = req.body;
 
   if (shopName && shopName !== vendor.shopName) {
     const shopExists = await Vendor.findOne({ shopName, _id: { $ne: vendor._id } });
@@ -206,6 +206,9 @@ const updateVendorProfile = asyncHandler(async (req, res) => {
   if (address !== undefined) vendor.address = address;
   if (city !== undefined) vendor.city = city;
   if (country !== undefined) vendor.country = country;
+  if (accentColor !== undefined) vendor.accentColor = accentColor;
+  if (tagline !== undefined) vendor.tagline = tagline;
+  if (theme !== undefined) vendor.theme = theme;
   if (socialLinks !== undefined) vendor.socialLinks = { ...vendor.socialLinks?.toObject?.() || {}, ...socialLinks };
   if (acceptedPayments !== undefined) vendor.acceptedPayments = acceptedPayments;
 
@@ -327,6 +330,8 @@ const getVendorStats = asyncHandler(async (req, res) => {
   }
 
   const totalProducts = await Product.countDocuments({ vendor: vendor._id });
+  const physicalProducts = await Product.countDocuments({ vendor: vendor._id, productType: 'PHYSICAL' });
+  const digitalProducts = await Product.countDocuments({ vendor: vendor._id, productType: 'DIGITAL' });
   
   // Commandes contenant des produits de ce vendeur
   const orders = await Order.find({ 'items.vendor': vendor._id });
@@ -334,11 +339,25 @@ const getVendorStats = asyncHandler(async (req, res) => {
   
   let totalRevenue = 0;
   let totalCommission = 0;
+  let physicalRevenue = 0;
+  let digitalRevenue = 0;
+  let physicalSales = 0;
+  let digitalSales = 0;
+
   orders.forEach(order => {
     order.items.forEach(item => {
       if (item.vendor && item.vendor.toString() === vendor._id.toString()) {
-        totalRevenue += item.price * item.quantity;
+        const itemTotal = item.price * item.quantity;
+        totalRevenue += itemTotal;
         totalCommission += item.commissionAmount || 0;
+
+        if (item.productType === 'DIGITAL') {
+          digitalRevenue += itemTotal;
+          digitalSales += item.quantity;
+        } else {
+          physicalRevenue += itemTotal;
+          physicalSales += item.quantity;
+        }
       }
     });
   });
@@ -354,14 +373,23 @@ const getVendorStats = asyncHandler(async (req, res) => {
 
   res.json({
     totalProducts,
+    physicalProducts,
+    digitalProducts,
     totalOrders,
     totalRevenue,
     totalCommission,
     netRevenue: totalRevenue - totalCommission,
+    physicalRevenue,
+    digitalRevenue,
+    physicalSales,
+    digitalSales,
     pendingOrders,
     deliveredOrders,
     rating: vendor.rating,
     totalReviews: vendor.totalReviews,
+    kycStatus: vendor.kycStatus || 'NOT_SUBMITTED',
+    payoutsBlocked: vendor.payoutsBlocked !== false,
+    kycRejectionReason: vendor.kycRejectionReason || '',
     subscription: subscription ? {
       planName: subscription.planSnapshot.name,
       endDate: subscription.endDate,
@@ -537,6 +565,110 @@ const getTopVendors = asyncHandler(async (req, res) => {
   res.json(vendorsWithCount);
 });
 
+// @desc    Submit KYC documents (CNI + Selfie)
+// @route   POST /api/vendors/kyc
+// @access  Private/Vendor
+const submitKYC = asyncHandler(async (req, res) => {
+  const { kycIdDocument, kycSelfie, businessType } = req.body;
+
+  if (!kycIdDocument || !kycSelfie) {
+    res.status(400);
+    throw new Error('Veuillez fournir la pièce d\'identité (CNI/Passeport) et le selfie');
+  }
+
+  const vendor = await Vendor.findOne({ user: req.user._id });
+  if (!vendor) {
+    res.status(404);
+    throw new Error('Profil vendeur non trouvé');
+  }
+
+  vendor.kycIdDocument = kycIdDocument;
+  vendor.kycSelfie = kycSelfie;
+  if (businessType) vendor.businessType = businessType;
+  vendor.kycStatus = 'PENDING';
+  vendor.kycSubmittedAt = new Date();
+  vendor.payoutsBlocked = true; // Reste bloqué jusqu'à approbation admin
+  vendor.kycRejectionReason = '';
+
+  await vendor.save();
+
+  res.json({
+    success: true,
+    message: 'Dossier KYC soumis avec succès. L\'administrateur va l\'examiner sous 24-48h.',
+    kycStatus: vendor.kycStatus,
+    kycSubmittedAt: vendor.kycSubmittedAt,
+    payoutsBlocked: vendor.payoutsBlocked
+  });
+});
+
+// @desc    Get vendor KYC status
+// @route   GET /api/vendors/kyc
+// @access  Private/Vendor
+const getKYCStatus = asyncHandler(async (req, res) => {
+  const vendor = await Vendor.findOne({ user: req.user._id });
+  if (!vendor) {
+    res.status(404);
+    throw new Error('Profil vendeur non trouvé');
+  }
+
+  res.json({
+    kycStatus: vendor.kycStatus || 'NOT_SUBMITTED',
+    kycIdDocument: vendor.kycIdDocument || '',
+    kycSelfie: vendor.kycSelfie || '',
+    kycSubmittedAt: vendor.kycSubmittedAt,
+    kycVerifiedAt: vendor.kycVerifiedAt,
+    kycRejectionReason: vendor.kycRejectionReason || '',
+    payoutsBlocked: vendor.payoutsBlocked !== false
+  });
+});
+
+// @desc    Admin update vendor KYC status (Approve / Reject)
+// @route   PUT /api/vendors/admin/:id/kyc
+// @access  Private/Admin
+const adminUpdateKYC = asyncHandler(async (req, res) => {
+  const { status, rejectionReason } = req.body;
+  const vendor = await Vendor.findById(req.params.id);
+
+  if (!vendor) {
+    res.status(404);
+    throw new Error('Vendeur non trouvé');
+  }
+
+  if (status === 'VERIFIED') {
+    vendor.kycStatus = 'VERIFIED';
+    vendor.isVerified = true;
+    vendor.payoutsBlocked = false; // Débloque les retraits !
+    vendor.kycVerifiedAt = new Date();
+    vendor.kycRejectionReason = '';
+    if (!vendor.badges.includes('VERIFIED')) {
+      vendor.badges.push('VERIFIED');
+    }
+  } else if (status === 'REJECTED') {
+    vendor.kycStatus = 'REJECTED';
+    vendor.isVerified = false;
+    vendor.payoutsBlocked = true;
+    vendor.kycRejectionReason = rejectionReason || 'Documents non conformes ou illisibles';
+    vendor.badges = vendor.badges.filter(b => b !== 'VERIFIED');
+  } else {
+    res.status(400);
+    throw new Error('Statut KYC invalide (doit être VERIFIED ou REJECTED)');
+  }
+
+  await vendor.save();
+
+  res.json({
+    success: true,
+    message: status === 'VERIFIED' ? 'KYC validé, retraits débloqués' : 'KYC rejeté',
+    vendor: {
+      id: vendor._id,
+      shopName: vendor.shopName,
+      kycStatus: vendor.kycStatus,
+      payoutsBlocked: vendor.payoutsBlocked,
+      kycRejectionReason: vendor.kycRejectionReason
+    }
+  });
+});
+
 module.exports = {
   registerVendor,
   getMyVendorProfile,
@@ -548,5 +680,8 @@ module.exports = {
   getVendorOrders,
   getAllVendorsAdmin,
   updateVendorStatus,
-  updateVendorCommission
+  updateVendorCommission,
+  submitKYC,
+  getKYCStatus,
+  adminUpdateKYC
 };

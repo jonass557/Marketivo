@@ -116,12 +116,13 @@ export const DEFAULT_PLANS = [
 export const DEFAULT_CATEGORIES = [
   { _id: 'cat_elec', id: 'cat_elec', name: 'Électronique', slug: 'electronique', description: 'Appareils électroniques, smartphones, audio', image: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400&auto=format&fit=crop&q=80' },
   { _id: 'cat_mode', id: 'cat_mode', name: 'Mode', slug: 'mode', description: 'Vêtements et accessoires tendance', image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=400&auto=format&fit=crop&q=80' },
+  { _id: 'cat_digital', id: 'cat_digital', name: 'Produits Digitaux & Ebooks', slug: 'produits-digitaux', description: 'Ebooks, templates, formations et ressources téléchargeables', image: 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=400&auto=format&fit=crop&q=80' },
   { _id: 'cat_maison', id: 'cat_maison', name: 'Maison', slug: 'maison', description: 'Articles et décoration pour la maison', image: 'https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=400&auto=format&fit=crop&q=80' },
   { _id: 'cat_sports', id: 'cat_sports', name: 'Sports', slug: 'sports', description: 'Équipements et accessoires sportifs', image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&auto=format&fit=crop&q=80' },
   { _id: 'cat_beaute', id: 'cat_beaute', name: 'Beauté', slug: 'beaute', description: 'Soins, cosmétiques et bien-être', image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&auto=format&fit=crop&q=80' }
 ];
 
-// Produits par défaut pour affichage immédiat
+// Produits par défaut pour affichage immédiat (Hybride Chariow + Jumia)
 export const DEFAULT_PRODUCTS = [
   {
     _id: "prod_1",
@@ -130,12 +131,54 @@ export const DEFAULT_PRODUCTS = [
     slug: "smartphone-android-pro-128go",
     price: 125000,
     comparePrice: 150000,
+    productType: "PHYSICAL",
     image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&auto=format&fit=crop&q=80",
     images: ["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&auto=format&fit=crop&q=80"],
     category: { name: "Électronique", slug: "electronique" },
     rating: 4.8,
     numReviews: 24,
     countInStock: 15,
+    stock: 15,
+    isPopular: true
+  },
+  {
+    _id: "prod_dig_1",
+    id: "prod_dig_1",
+    name: "Pack 500+ Templates Canva Pro & Réseaux Sociaux",
+    slug: "pack-templates-canva-pro",
+    price: 5000,
+    comparePrice: 15000,
+    productType: "DIGITAL",
+    digitalType: "TEMPLATE",
+    digitalFileName: "Pack_Canva_Templates_Marketivo.pdf",
+    digitalInstructions: "Cliquez sur le lien fourni après paiement pour dupliquer les templates directement dans votre compte Canva.",
+    image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80",
+    images: ["https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=80"],
+    category: { name: "Produits Digitaux & Ebooks", slug: "produits-digitaux" },
+    rating: 4.9,
+    numReviews: 58,
+    countInStock: 999999,
+    stock: 999999,
+    isPopular: true
+  },
+  {
+    _id: "prod_dig_2",
+    id: "prod_dig_2",
+    name: "Ebook Guide Complet : Vendre et Réussir en E-commerce au Cameroun",
+    slug: "ebook-guide-ecommerce-cameroun",
+    price: 3500,
+    comparePrice: 10000,
+    productType: "DIGITAL",
+    digitalType: "EBOOK",
+    digitalFileName: "Guide_Ecommerce_Cameroun.pdf",
+    digitalInstructions: "Téléchargement instantané disponible immédiatement après votre paiement.",
+    image: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=80",
+    images: ["https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=80"],
+    category: { name: "Produits Digitaux & Ebooks", slug: "produits-digitaux" },
+    rating: 5.0,
+    numReviews: 37,
+    countInStock: 999999,
+    stock: 999999,
     isPopular: true
   },
   {
@@ -145,12 +188,14 @@ export const DEFAULT_PRODUCTS = [
     slug: "ecouteurs-sans-fil-bluetooth",
     price: 18000,
     comparePrice: 25000,
+    productType: "PHYSICAL",
     image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80",
     images: ["https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80"],
     category: { name: "Électronique", slug: "electronique" },
     rating: 4.9,
     numReviews: 42,
     countInStock: 20,
+    stock: 20,
     isPopular: true
   },
   {
@@ -160,12 +205,14 @@ export const DEFAULT_PRODUCTS = [
     slug: "montre-connectee-sport",
     price: 32000,
     comparePrice: 45000,
+    productType: "PHYSICAL",
     image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80",
     images: ["https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80"],
     category: { name: "Électronique", slug: "electronique" },
     rating: 4.7,
     numReviews: 19,
     countInStock: 10,
+    stock: 10,
     isPopular: true
   },
   {
@@ -175,12 +222,14 @@ export const DEFAULT_PRODUCTS = [
     slug: "sneakers-tendance-urbaines",
     price: 24000,
     comparePrice: 30000,
+    productType: "PHYSICAL",
     image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&auto=format&fit=crop&q=80",
     images: ["https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&auto=format&fit=crop&q=80"],
     category: { name: "Mode", slug: "mode" },
     rating: 4.6,
     numReviews: 31,
     countInStock: 12,
+    stock: 12,
     isPopular: true
   }
 ];
