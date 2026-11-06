@@ -13,6 +13,7 @@ const SubscriptionPlan = require('./SubscriptionPlan');
 const UserSubscription = require('./UserSubscription');
 const Conversation = require('./Conversation');
 const Message = require('./Message');
+const Coupon = require('./Coupon');
 
 module.exports = {
   User,
@@ -29,5 +30,6 @@ module.exports = {
   SubscriptionPlan,
   UserSubscription,
   Conversation,
-  Message
+  Message,
+  Coupon
 };

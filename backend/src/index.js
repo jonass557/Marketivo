@@ -35,6 +35,8 @@ const vendorRoutes = require('./routes/vendorRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
+const couponRoutes = require('./routes/couponRoutes');
+const downloadRoutes = require('./routes/downloadRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -221,6 +223,8 @@ app.use('/api/vendors', vendorRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/partners', partnerRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/downloads', downloadRoutes);
 
 app.get('/', (req, res) => {
   res.send('API MyShop Marketplace est en ligne');

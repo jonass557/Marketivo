@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Eye, ChevronLeft, ChevronRight, Download, Loader, CheckCircle, XCircle, Truck, Package, Clock } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Download, Loader, CheckCircle, XCircle, Truck, Package, Clock, RotateCcw, ShieldCheck, Tag, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../../config/api';
 import { FALLBACK_IMAGE_SVG, safeImage } from '../../data/defaultData';
@@ -26,6 +26,34 @@ const Orders = () => {
     processing: 0,
     delivered: 0
   });
+
+  // Remboursement administrateur (Cahier des charges 4.6)
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundLoading, setRefundLoading] = useState(false);
+
+  const handleRefund = async () => {
+    if (!selectedOrder) return;
+    try {
+      setRefundLoading(true);
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const { data } = await axios.post(`${API_URL}/api/orders/admin/${selectedOrder.id}/refund`, {
+        amount: parseFloat(refundAmount) || selectedOrder.totalAmount || selectedOrder.total,
+        reason: refundReason.trim() || 'Remboursement accordé par l\'administrateur'
+      }, config);
+
+      toast.success(data.message || 'Commande remboursée avec succès');
+      const updated = data.order || { escrowStatus: 'REFUNDED', status: 'CANCELLED' };
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...updated, escrowStatus: 'REFUNDED', status: 'CANCELLED' } : o));
+      setSelectedOrder(prev => ({ ...prev, ...updated, escrowStatus: 'REFUNDED', status: 'CANCELLED' }));
+      setShowRefundModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erreur lors du remboursement');
+    } finally {
+      setRefundLoading(false);
+    }
+  };
 
   // Mapping des statuts API vers affichage
   const statusMap = {
@@ -366,7 +394,16 @@ const Orders = () => {
                   const dateInfo = formatDate(order.createdAt);
                   return (
                     <tr key={order.id} className={`border-t hover:bg-gray-50 ${order.status === 'PENDING' ? 'bg-yellow-50' : ''}`}>
-                      <td className="px-6 py-4 font-medium text-orange-600">{getOrderNumber(order.id)}</td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-orange-600 font-mono text-sm">
+                          {order.orderNumber || getOrderNumber(order.id)}
+                        </div>
+                        {order.deliveryCode && (
+                          <span className="inline-block mt-0.5 text-[10px] font-mono font-bold bg-amber-50 text-amber-800 px-1.5 py-0.2 rounded border border-amber-300">
+                            Code: {order.deliveryCode}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <div>
                           <p className="font-medium">{order.user?.fullName || 'Client'}</p>
@@ -388,20 +425,31 @@ const Orders = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-medium">{formatPrice(order.totalAmount)}</td>
+                      <td className="px-6 py-4 font-medium">{formatPrice(order.totalAmount || order.total)}</td>
                       <td className="px-6 py-4 text-sm">
                         {order.paymentMethod === 'cod' && '💵 Livraison'}
                         {order.paymentMethod === 'momo' && '📱 MoMo'}
                         {order.paymentMethod === 'om' && '🟠 OM'}
+                        {order.paymentMethod === 'ikeepay' && '📱 iKeepay'}
                         {order.paymentMethod === 'stripe' && '💳 Stripe'}
                         {order.paymentMethod === 'paypal' && '🅿️ PayPal'}
                         {order.paymentMethod === 'cinetpay' && '🌍 CinetPay'}
                         {!order.paymentMethod && '💵 Livraison'}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                          {statusMap[order.status] || order.status}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                            {statusMap[order.status] || order.status}
+                          </span>
+                          {order.escrowStatus && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              order.escrowStatus === 'HELD' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                              order.escrowStatus === 'RELEASED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {order.escrowStatus === 'HELD' ? '🛡️ Séquestre' : order.escrowStatus === 'RELEASED' ? '✅ Libéré' : '↩️ Remboursé'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {dateInfo.date}<br />{dateInfo.time}
@@ -551,6 +599,56 @@ const Orders = () => {
                 </div>
               </div>
 
+              {/* Code de confirmation et Séquestre (Cahier des charges 4.6 & 4.7) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {selectedOrder.deliveryCode && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5 mb-1">
+                      <ShieldCheck size={14} className="text-amber-600" />
+                      Code secret de confirmation (Livreur) :
+                    </p>
+                    <p className="font-mono text-xl font-extrabold text-amber-950 tracking-widest bg-white p-2 rounded border border-amber-200 text-center">
+                      {selectedOrder.deliveryCode}
+                    </p>
+                  </div>
+                )}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5 mb-1">
+                    <ShieldCheck size={14} className="text-blue-600" />
+                    Statut Séquestre (Escrow) :
+                  </p>
+                  <p className="font-semibold text-sm text-blue-950">
+                    {selectedOrder.escrowStatus === 'HELD' && '🛡️ Retenu sur plateforme (Attente de livraison)'}
+                    {selectedOrder.escrowStatus === 'RELEASED' && '✅ Libéré au vendeur'}
+                    {selectedOrder.escrowStatus === 'REFUNDED' && '↩️ Remboursé à l\'acheteur'}
+                    {!selectedOrder.escrowStatus && 'Standard'}
+                  </p>
+                  {selectedOrder.refund?.isRefunded && (
+                    <p className="text-[11px] text-red-600 mt-1">
+                      Remboursement de {formatPrice(selectedOrder.refund.amount)} ({selectedOrder.refund.reason})
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sub-orders per vendor if split */}
+              {selectedOrder.subOrders?.length > 1 && (
+                <div className="p-3 bg-gray-50 rounded-lg border">
+                  <h4 className="font-bold text-xs text-gray-700 uppercase mb-2">Sous-commandes par vendeur ({selectedOrder.subOrders.length})</h4>
+                  <div className="space-y-2">
+                    {selectedOrder.subOrders.map((sub, sIdx) => (
+                      <div key={sIdx} className="bg-white p-2.5 rounded border text-xs flex justify-between items-center">
+                        <div>
+                          <span className="font-semibold text-gray-900">Vendeur ID: {String(sub.vendor).slice(-6)}</span>
+                          <p className="text-gray-500">{sub.items?.length || 0} article(s) • Statut: {sub.status}</p>
+                        </div>
+                        <span className="font-bold text-orange-600">{formatPrice(sub.subTotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Status Update Actions */}
               <div>
                 <h3 className="font-medium mb-3">Mettre à jour le statut</h3>
@@ -559,14 +657,14 @@ const Orders = () => {
                     <>
                       <button
                         onClick={() => updateOrderStatus(selectedOrder.id, 'Confirmé')}
-                        className="flex items-center justify-center gap-2 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                        className="flex items-center justify-center gap-2 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium"
                       >
                         <CheckCircle size={16} />
                         Confirmer
                       </button>
                       <button
                         onClick={() => updateOrderStatus(selectedOrder.id, 'Annulé')}
-                        className="flex items-center justify-center gap-2 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                        className="flex items-center justify-center gap-2 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
                       >
                         <XCircle size={16} />
                         Annuler
@@ -577,14 +675,14 @@ const Orders = () => {
                     <>
                       <button
                         onClick={() => updateOrderStatus(selectedOrder.id, 'Livré')}
-                        className="flex items-center justify-center gap-2 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                        className="flex items-center justify-center gap-2 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium"
                       >
                         <CheckCircle size={16} />
                         Marquer comme livré
                       </button>
                       <button
                         onClick={() => updateOrderStatus(selectedOrder.id, 'Annulé')}
-                        className="flex items-center justify-center gap-2 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                        className="flex items-center justify-center gap-2 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
                       >
                         <XCircle size={16} />
                         Annuler
@@ -592,25 +690,103 @@ const Orders = () => {
                     </>
                   )}
                   {selectedOrder.status === 'DELIVERED' && (
-                    <p className="col-span-full text-center text-green-600 font-medium py-2">
+                    <p className="col-span-full text-center text-green-600 font-medium py-2 text-sm">
                       ✓ Cette commande a été livrée avec succès
                     </p>
                   )}
                   {selectedOrder.status === 'CANCELLED' && (
-                    <p className="col-span-full text-center text-red-600 font-medium py-2">
+                    <p className="col-span-full text-center text-red-600 font-medium py-2 text-sm">
                       ✗ Cette commande a été annulée
                     </p>
                   )}
                 </div>
+
+                {/* Bouton de remboursement administrateur (Cahier des charges 4.6) */}
+                {selectedOrder.escrowStatus !== 'REFUNDED' && (
+                  <div className="mt-3 pt-3 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRefundAmount(String(selectedOrder.totalAmount || selectedOrder.total));
+                        setRefundReason('');
+                        setShowRefundModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-bold transition-colors"
+                    >
+                      <RotateCcw size={16} />
+                      Rembourser la commande (Total ou partiel)
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Close Button */}
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="w-full py-2 border rounded-lg hover:bg-gray-50"
+                className="w-full py-2 border rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
               >
                 Fermer
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Remboursement Administrateur (Cahier des charges 4.6) */}
+      {showRefundModal && selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in space-y-4">
+            <div className="flex items-center gap-2 text-amber-600 font-bold text-lg border-b pb-3">
+              <RotateCcw size={22} />
+              <span>Remboursement Administrateur</span>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Vous pouvez émettre un remboursement total ou partiel pour la commande <strong>{selectedOrder.orderNumber || selectedOrder.id}</strong>.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Montant à rembourser (FCFA)</label>
+              <input
+                type="number"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-bold text-gray-900 focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Motif du remboursement</label>
+              <textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Ex: Produit défectueux, accord amiable, etc."
+                rows={2}
+                className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(false)}
+                className="flex-1 py-2 border rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={refundLoading || !refundAmount}
+                onClick={handleRefund}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                {refundLoading ? <Loader size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                Valider Remboursement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
             </div>
           </div>
         </div>

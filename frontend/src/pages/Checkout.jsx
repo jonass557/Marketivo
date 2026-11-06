@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw, Zap, Download } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw, Zap, Download, Tag, Check, ShieldCheck, Printer, FileText } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -22,6 +22,19 @@ const Checkout = () => {
   const [orderSuccess, setOrderSuccess] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [createdOrderId, setCreatedOrderId] = useState(null);
+
+  // Mode de livraison physique (Cahier des charges 4.5)
+  const [deliveryMethod, setDeliveryMethod] = useState('STANDARD'); // 'STANDARD' | 'EXPRESS' | 'PICKUP'
+
+  // Code promo / Coupon
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponCodeInput, setCouponCodeInput] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState('');
+
+  // Facture modale
+  const [invoiceModal, setInvoiceModal] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(null);
   
   // État spécifique pour le paiement Mobile Money (iKeepay)
   const [ikeepayDetails, setIkeepayDetails] = useState({
@@ -73,11 +86,82 @@ const Checkout = () => {
   const isDigitalOnly = cartItems.length > 0 && cartItems.every(item => item.productType === 'DIGITAL');
   const hasDigitalItems = cartItems.some(item => item.productType === 'DIGITAL');
 
-  // Calculer les frais de livraison selon les paramètres (0 FCFA si panier 100% digital)
+  // Charger le coupon sauvegardé depuis localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('appliedCoupon');
+      if (saved) {
+        setAppliedCoupon(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Erreur chargement coupon:', e);
+    }
+  }, []);
+
+  const handleApplyCoupon = async (e) => {
+    e?.preventDefault();
+    if (!couponCodeInput.trim()) return;
+    try {
+      setCouponLoading(true);
+      setCouponError('');
+      const { data } = await axios.post(`${API_URL}/api/coupons/validate`, {
+        code: couponCodeInput.trim(),
+        orderAmount: cartTotal
+      });
+      if (data?.valid) {
+        const cData = {
+          code: data.coupon.code,
+          discountAmount: data.coupon.discountAmount,
+          discountType: data.coupon.discountType,
+          discountValue: data.coupon.discountValue
+        };
+        setAppliedCoupon(cData);
+        localStorage.setItem('appliedCoupon', JSON.stringify(cData));
+        toast.success(`Code promo "${data.coupon.code}" appliqué ! (-${formatPrice(data.coupon.discountAmount)})`);
+        setCouponCodeInput('');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Code promo invalide';
+      setCouponError(msg);
+      toast.error(msg);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    localStorage.removeItem('appliedCoupon');
+    toast.info('Code promo retiré');
+  };
+
+  const handleViewInvoice = async (orderId) => {
+    if (!orderId) return;
+    try {
+      const config = user?.token ? { headers: { Authorization: `Bearer ${user.token}` } } : {};
+      const { data } = await axios.get(`${API_URL}/api/orders/${orderId}/invoice`, config);
+      setInvoiceData(data);
+      setInvoiceModal(true);
+    } catch (e) {
+      toast.error('Erreur lors du chargement de la facture');
+    }
+  };
+
+  // Calcul frais de livraison dynamique selon le mode choisi (Cahier des charges 4.5)
+  const getCalculatedShipping = () => {
+    if (isDigitalOnly) return 0;
+    if (deliveryMethod === 'PICKUP') return 0;
+    const base = settings?.defaultShippingFee || 2000;
+    if (cartTotal >= 50000) return deliveryMethod === 'EXPRESS' ? 1500 : 0;
+    if (deliveryMethod === 'EXPRESS') return base + 1500;
+    return base;
+  };
+
   const enableShipping = !isDigitalOnly && settings?.enableShipping !== false;
-  const shippingCost = enableShipping ? (settings?.defaultShippingFee || 2000) : 0;
+  const shippingCost = enableShipping ? getCalculatedShipping() : 0;
   const subtotal = cartTotal;
-  const total = subtotal + shippingCost;
+  const discountAmount = appliedCoupon ? Math.min(appliedCoupon.discountAmount, subtotal) : 0;
+  const total = Math.max(0, subtotal - discountAmount) + shippingCost;
 
   // Sauvegarder les données du formulaire dans localStorage à chaque modification
   useEffect(() => {
@@ -139,11 +223,6 @@ const Checkout = () => {
 
     setLoading(true);
 
-    if (!user) {
-      navigate('/login?redirect=checkout');
-      return;
-    }
-
     try {
       const orderItems = cartItems.map(item => ({
         productId: item.id,
@@ -155,17 +234,18 @@ const Checkout = () => {
         digitalFileUrl: item.digitalFileUrl,
         digitalFileName: item.digitalFileName,
         digitalAccessLink: item.digitalAccessLink,
-        digitalInstructions: item.digitalInstructions
+        digitalInstructions: item.digitalInstructions,
+        selectedVariant: item.selectedVariant || null
       }));
 
-      const config = {
+      const config = user?.token ? {
         headers: { Authorization: `Bearer ${user.token}` }
-      };
+      } : {};
 
       const finalAddress = isDigitalOnly ? (formData.address?.trim() || 'Livraison Numérique Instantanée') : formData.address;
       const finalCity = isDigitalOnly ? (formData.city || 'Numérique') : formData.city;
 
-      // Créer la commande
+      // Créer la commande (Hybride Chariow + Jumia avec commande invité autorisée pour digital)
       const { data } = await axios.post(`${API_URL}/api/orders`, {
         items: orderItems,
         shippingAddress: finalAddress,
@@ -173,7 +253,12 @@ const Checkout = () => {
         phone: formData.phone,
         paymentMethod: formData.paymentMethod,
         shippingCost,
-        notes: formData.notes
+        deliveryMethod: isDigitalOnly ? 'DIGITAL' : deliveryMethod,
+        couponCode: appliedCoupon?.code,
+        notes: formData.notes,
+        guestCheckout: !user,
+        guestEmail: !user ? formData.email : undefined,
+        guestPhone: !user ? formData.phone : undefined
       }, config);
 
       const orderId = data.order?.id;
@@ -312,7 +397,7 @@ const Checkout = () => {
   const handleIkeepayPayment = async (orderId, amount) => {
     try {
       setPaymentLoading(true);
-      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const config = user?.token ? { headers: { Authorization: `Bearer ${user.token}` } } : {};
       
       const phoneToUse = (ikeepayDetails.phone || formData.phone || '').trim();
       if (!phoneToUse) {
@@ -358,7 +443,7 @@ const Checkout = () => {
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+        const config = user?.token ? { headers: { Authorization: `Bearer ${user.token}` } } : {};
         const { data } = await axios.get(`${API_URL}/api/payments/ikeepay/verify/${reference}`, config);
 
         if (data.isPaid || data.status === 'completed' || data.status === 'success') {
@@ -391,7 +476,7 @@ const Checkout = () => {
     if (!ikeepayReference) return;
     try {
       setIkeepayCheckLoading(true);
-      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const config = user?.token ? { headers: { Authorization: `Bearer ${user.token}` } } : {};
       const { data } = await axios.get(`${API_URL}/api/payments/ikeepay/verify/${ikeepayReference}`, config);
 
       if (data.isPaid || data.status === 'completed' || data.status === 'success') {
@@ -480,18 +565,64 @@ const Checkout = () => {
 
   // Page de succès
   if (orderSuccess) {
+    const isSuccessDigitalOnly = isDigitalOnly || orderSuccess.order?.isDigitalOnly;
+    const orderNum = orderSuccess.order?.orderNumber || orderSuccess.order?.id;
+    const invNum = orderSuccess.invoiceNumber || orderSuccess.order?.invoiceNumber;
+    const delCode = orderSuccess.deliveryCode || orderSuccess.order?.deliveryCode;
+
     return (
       <div className="min-h-screen bg-gray-100 py-12">
         <div className="container mx-auto px-4">
-          <div className="max-w-lg mx-auto bg-white rounded-xl shadow-lg p-8 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-8 text-center animate-fade-in">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5 shadow-sm">
               <CheckCircle className="text-green-500" size={48} />
             </div>
             
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Commande confirmée !</h1>
-            <p className="text-gray-500 mb-6">
-              Votre commande #{orderSuccess.order?.id?.slice(0, 8)} a été enregistrée avec succès.
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Commande validée avec succès !</h1>
+            <p className="text-gray-500 text-sm mb-5">
+              Merci pour votre confiance. Votre commande est prise en charge.
             </p>
+
+            {/* Code Secret de Confirmation de Livraison (Cahier des charges 4.7) */}
+            {!isSuccessDigitalOnly && delCode && (
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-dashed border-amber-400 rounded-2xl p-5 mb-6 text-center shadow-sm">
+                <div className="flex items-center justify-center gap-1.5 text-amber-900 font-bold text-xs uppercase tracking-wider mb-1">
+                  <ShieldCheck size={18} className="text-amber-600" />
+                  Code secret de confirmation de livraison
+                </div>
+                <div className="text-3xl sm:text-4xl font-extrabold text-amber-950 tracking-widest font-mono my-2 select-all">
+                  {delCode}
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed max-w-sm mx-auto">
+                  ⚠️ <strong>Sécurité anti-fraude (Séquestre) :</strong> Ne transmettez ce code à 6 chiffres au livreur <strong>qu'après avoir reçu et inspecté vos articles</strong> en main propre.
+                </p>
+              </div>
+            )}
+
+            {/* Numéros officiels & Facture */}
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left space-y-2 border border-gray-200 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                <span className="text-gray-500">N° de commande :</span>
+                <span className="font-bold font-mono text-gray-900">{orderNum}</span>
+              </div>
+              {invNum && (
+                <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                  <span className="text-gray-500">N° de Facture officielle :</span>
+                  <span className="font-bold font-mono text-orange-600">{invNum}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-gray-500">Facture & Reçu d'achat :</span>
+                <button
+                  type="button"
+                  onClick={() => handleViewInvoice(orderSuccess.order?.id || createdOrderId)}
+                  className="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-black text-white px-3 py-1.5 rounded-lg font-bold text-xs transition-colors shadow-sm"
+                >
+                  <Printer size={13} />
+                  Imprimer la Facture
+                </button>
+              </div>
+            </div>
 
             {/* Blocs de téléchargement instantané (Modèle Chariow) */}
             {hasDigitalItems && (
@@ -529,19 +660,18 @@ const Checkout = () => {
             )}
             
             <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-              <h3 className="font-semibold mb-2">Récapitulatif</h3>
+              <h3 className="font-semibold mb-2 text-sm text-gray-800">Récapitulatif de paiement</h3>
               <div className="text-sm text-gray-600 space-y-1">
-                <p>Total: <span className="font-bold text-orange-500">{formatPrice(total)}</span></p>
-                <p>Paiement: {
+                <p>Total payé : <span className="font-bold text-orange-500">{formatPrice(total)}</span></p>
+                <p>Moyen utilisé : {
                   paymentMethods.find(m => m.id === formData.paymentMethod)?.name || 
                   (formData.paymentMethod === 'cod' ? 'À la livraison' : formData.paymentMethod)
                 }</p>
+                <p className="text-xs text-green-700 flex items-center gap-1 mt-1 font-medium">
+                  <ShieldCheck size={14} /> Séquestre sécurisé (Escrow) garanti par la plateforme
+                </p>
               </div>
             </div>
-
-            <p className="text-sm text-gray-500 mb-6">
-              Vous recevrez un appel de confirmation sous peu. Le vendeur a été notifié de votre commande.
-            </p>
 
             {/* Lien WhatsApp pour contacter le vendeur */}
             {orderSuccess.whatsappLink && (
@@ -549,29 +679,126 @@ const Checkout = () => {
                 href={orderSuccess.whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-medium mb-4 transition-colors"
+                className="w-full inline-flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-bold mb-4 transition-colors shadow-sm"
               >
                 <MessageCircle size={20} />
                 Contacter le vendeur sur WhatsApp
               </a>
             )}
 
-            <div className="flex gap-3 justify-center mt-4">
+            <div className="flex gap-3 justify-center mt-2">
               <Link
-                to="/profile"
-                className="px-6 py-2 border rounded-lg hover:bg-gray-50"
+                to="/orders"
+                className="px-5 py-2.5 border rounded-xl hover:bg-gray-50 text-xs font-bold text-gray-700 transition-colors"
               >
                 Mes commandes
               </Link>
               <Link
                 to="/shop"
-                className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                className="px-5 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 text-xs font-bold transition-colors shadow-sm"
               >
                 Continuer mes achats
               </Link>
             </div>
           </div>
         </div>
+
+        {/* Modal de facture imprimable */}
+        {invoiceModal && invoiceData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 animate-fade-in">
+              <div className="flex justify-between items-start border-b pb-4 mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">FACTURE OFFICIELLE</h2>
+                  <p className="text-xs text-orange-600 font-mono font-bold">{invoiceData.invoiceNumber}</p>
+                  <p className="text-xs text-gray-400">Date : {new Date(invoiceData.date).toLocaleDateString('fr-FR')}</p>
+                </div>
+                <button onClick={() => setInvoiceModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Client & Vendeur */}
+              <div className="grid grid-cols-2 gap-4 text-xs mb-6 p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="font-bold text-gray-700 mb-1">CLIENT</p>
+                  <p className="font-semibold text-gray-900">{invoiceData.customer?.fullName || 'Client'}</p>
+                  <p className="text-gray-600">{invoiceData.customer?.email}</p>
+                  <p className="text-gray-600">{invoiceData.customer?.phone}</p>
+                  <p className="text-gray-600">{invoiceData.shippingAddress}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-gray-700 mb-1">PLATEFORME</p>
+                  <p className="font-semibold text-gray-900">{invoiceData.store?.name || 'Marketivo'}</p>
+                  <p className="text-gray-600">{invoiceData.store?.email}</p>
+                  <p className="text-gray-600">{invoiceData.store?.phone}</p>
+                  <p className="text-gray-600 font-medium">Mode: {invoiceData.paymentMethod?.toUpperCase()}</p>
+                </div>
+              </div>
+
+              {/* Tableau des articles */}
+              <table className="w-full text-xs mb-6">
+                <thead>
+                  <tr className="border-b text-gray-500 text-left">
+                    <th className="py-2">Description</th>
+                    <th className="py-2 text-center">Qté</th>
+                    <th className="py-2 text-right">Prix Unitaire</th>
+                    <th className="py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {invoiceData.items?.map((it, idx) => (
+                    <tr key={idx}>
+                      <td className="py-2 font-medium">{it.name}</td>
+                      <td className="py-2 text-center">{it.quantity}</td>
+                      <td className="py-2 text-right">{formatPrice(it.unitPrice)}</td>
+                      <td className="py-2 text-right font-bold">{formatPrice(it.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Totaux facture */}
+              <div className="border-t pt-3 space-y-1 text-xs text-right max-w-xs ml-auto mb-6">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Sous-total :</span>
+                  <span>{formatPrice(invoiceData.subtotal)}</span>
+                </div>
+                {invoiceData.discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Remise ({invoiceData.couponCode || 'Promo'}) :</span>
+                    <span>-{formatPrice(invoiceData.discountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Frais de livraison :</span>
+                  <span>{formatPrice(invoiceData.shippingCost)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-sm text-gray-900 border-t pt-1">
+                  <span>TOTAL :</span>
+                  <span className="text-orange-600">{formatPrice(invoiceData.total)}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                >
+                  <Printer size={14} /> Imprimer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvoiceModal(false)}
+                  className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-gray-50 text-gray-700"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal d'avis */}
         {showReviewModal && orderedProducts.length > 0 && (
@@ -816,6 +1043,78 @@ const Checkout = () => {
                 </div>
               </div>
 
+              {/* Mode de livraison physique (Cahier des charges 4.5) */}
+              {!isDigitalOnly && (
+                <div className="bg-white rounded-xl shadow p-6">
+                  <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Truck className="text-orange-500" size={20} />
+                    Mode de livraison physique
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                      deliveryMethod === 'STANDARD' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <input
+                          type="radio"
+                          name="deliveryMethod"
+                          value="STANDARD"
+                          checked={deliveryMethod === 'STANDARD'}
+                          onChange={() => setDeliveryMethod('STANDARD')}
+                          className="text-orange-500 focus:ring-orange-500"
+                        />
+                        <span className="text-xs font-bold text-gray-700">Standard</span>
+                      </div>
+                      <p className="font-bold text-sm text-gray-900">24h - 48h</p>
+                      <p className="text-xs text-gray-500 mt-1">À domicile ou au bureau</p>
+                      <p className="text-xs font-bold text-orange-600 mt-2">
+                        {cartTotal >= 50000 ? 'Gratuit' : formatPrice(settings?.defaultShippingFee || 2000)}
+                      </p>
+                    </label>
+
+                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                      deliveryMethod === 'EXPRESS' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <input
+                          type="radio"
+                          name="deliveryMethod"
+                          value="EXPRESS"
+                          checked={deliveryMethod === 'EXPRESS'}
+                          onChange={() => setDeliveryMethod('EXPRESS')}
+                          className="text-orange-500 focus:ring-orange-500"
+                        />
+                        <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">⚡ Express</span>
+                      </div>
+                      <p className="font-bold text-sm text-gray-900">Le jour même</p>
+                      <p className="text-xs text-gray-500 mt-1">Livraison prioritaire garantie</p>
+                      <p className="text-xs font-bold text-purple-600 mt-2">
+                        {formatPrice((settings?.defaultShippingFee || 2000) + 1500)}
+                      </p>
+                    </label>
+
+                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition-all flex flex-col justify-between ${
+                      deliveryMethod === 'PICKUP' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-orange-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <input
+                          type="radio"
+                          name="deliveryMethod"
+                          value="PICKUP"
+                          checked={deliveryMethod === 'PICKUP'}
+                          onChange={() => setDeliveryMethod('PICKUP')}
+                          className="text-orange-500 focus:ring-orange-500"
+                        />
+                        <span className="text-[11px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Point Relais</span>
+                      </div>
+                      <p className="font-bold text-sm text-gray-900">Retrait direct</p>
+                      <p className="text-xs text-gray-500 mt-1">En boutique partenaire</p>
+                      <p className="text-xs font-bold text-green-600 mt-2">0 FCFA (Gratuit)</p>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {/* Mode de paiement */}
               <div className="bg-white rounded-xl shadow p-6">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -1010,19 +1309,76 @@ const Checkout = () => {
                 ))}
               </div>
 
+              {/* Code Promo Input */}
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 my-4">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <Tag size={13} className="text-orange-500" />
+                  Code promotionnel / Réduction
+                </label>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 text-green-800 px-3 py-1.5 rounded-lg text-xs font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <Check size={14} className="text-green-600" />
+                      <span><strong>{appliedCoupon.code}</strong> (-{formatPrice(appliedCoupon.discountAmount)})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="text-gray-400 hover:text-red-500 p-0.5"
+                      title="Retirer"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={couponCodeInput}
+                      onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                      placeholder="Code promo"
+                      className="flex-1 text-xs px-2.5 py-1.5 border rounded-lg uppercase tracking-wider focus:ring-2 focus:ring-orange-500 font-semibold"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      disabled={couponLoading || !couponCodeInput.trim()}
+                      className="px-3 py-1.5 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {couponLoading ? <Loader size={12} className="animate-spin" /> : 'OK'}
+                    </button>
+                  </div>
+                )}
+                {couponError && (
+                  <p className="text-[11px] text-red-600 mt-1">{couponError}</p>
+                )}
+              </div>
+
               {/* Totaux */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Sous-total</span>
                   <span>{formatPrice(subtotal)}</span>
                 </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-green-600 text-sm">
+                    <span>Remise ({appliedCoupon.code})</span>
+                    <span className="font-bold">-{formatPrice(discountAmount)}</span>
+                  </div>
+                )}
                 {enableShipping && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600 flex items-center gap-1">
-                    <Truck size={14} /> Livraison
+                    <Truck size={14} /> Livraison ({deliveryMethod === 'EXPRESS' ? 'Express' : deliveryMethod === 'PICKUP' ? 'Point Relais' : 'Standard'})
                   </span>
-                  <span>{formatPrice(shippingCost)}</span>
+                  <span>{shippingCost === 0 ? <span className="text-green-600 font-bold">Gratuite</span> : formatPrice(shippingCost)}</span>
                 </div>
+                )}
+                {isDigitalOnly && (
+                  <div className="flex justify-between text-xs text-purple-600 font-semibold">
+                    <span>⚡ Livraison digitale</span>
+                    <span>Instantanée (0 FCFA)</span>
+                  </div>
                 )}
                 <div className="flex justify-between font-bold text-lg border-t pt-2">
                   <span>Total</span>

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Package, ChevronRight, Calendar, Clock, CheckCircle, Truck, XCircle,
-  Eye, Star, X, Loader, Download, ExternalLink, Zap, FileText, Sparkles, AlertCircle
+  Eye, Star, X, Loader, Download, ExternalLink, Zap, FileText, Sparkles, AlertCircle,
+  Printer, ShieldCheck, Check
 } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
@@ -28,6 +29,60 @@ const MyOrders = () => {
   const [reviewData, setReviewData] = useState({ rating: 5, comment: '' });
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewedProducts, setReviewedProducts] = useState([]);
+
+  // Livraisons & Factures (Cahier des charges 4.6 & 4.7)
+  const [confirmingOrder, setConfirmingOrder] = useState(null);
+  const [invoiceModal, setInvoiceModal] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [downloadingItem, setDownloadingItem] = useState(null);
+
+  const handleConfirmDelivery = async (orderId, deliveryCode) => {
+    try {
+      setConfirmingOrder(orderId);
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      await axios.post(`${API_URL}/api/orders/${orderId}/confirm-delivery`, {
+        deliveryCode
+      }, config);
+      toast.success('Livraison confirmée avec succès ! Les fonds ont été libérés.');
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erreur lors de la confirmation de livraison');
+    } finally {
+      setConfirmingOrder(null);
+    }
+  };
+
+  const handleOpenInvoice = async (orderId) => {
+    try {
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const { data } = await axios.get(`${API_URL}/api/orders/${orderId}/invoice`, config);
+      setInvoiceData(data);
+      setInvoiceModal(true);
+    } catch (err) {
+      toast.error('Erreur chargement de la facture');
+    }
+  };
+
+  const handleSecureDownload = async (orderId, productId, fallbackUrl) => {
+    try {
+      setDownloadingItem(`${orderId}_${productId}`);
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const { data } = await axios.get(`${API_URL}/api/downloads/token/${orderId}/${productId}`, config);
+      if (data?.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
+      } else if (fallbackUrl) {
+        window.open(fallbackUrl, '_blank');
+      }
+    } catch (err) {
+      if (fallbackUrl) {
+        window.open(fallbackUrl, '_blank');
+      } else {
+        toast.error(err.response?.data?.message || 'Erreur lors de la génération du lien sécurisé');
+      }
+    } finally {
+      setDownloadingItem(null);
+    }
+  };
 
   const fetchOrders = async () => {
     if (!user) return;
@@ -258,13 +313,30 @@ const MyOrders = () => {
                       <div className="flex items-start gap-3">
                         <div className="mt-1">{getStatusIcon(order.status)}</div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-bold text-gray-900 text-sm">
-                              Commande #{order.id.slice(-8).toUpperCase()}
+                              {order.orderNumber || `Commande #${order.id.slice(-8).toUpperCase()}`}
                             </p>
-                            {order.isDigitalOnly && (
+                            {order.isDigitalOnly ? (
                               <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                ⚡ Produit Digital
+                                ⚡ Digital
+                              </span>
+                            ) : (
+                              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                📦 Physique
+                              </span>
+                            )}
+                            {order.escrowStatus && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                order.escrowStatus === 'HELD'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : order.escrowStatus === 'RELEASED'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {order.escrowStatus === 'HELD' && '🛡️ Séquestre sécurisé'}
+                                {order.escrowStatus === 'RELEASED' && '✅ Séquestre libéré'}
+                                {order.escrowStatus === 'REFUNDED' && '↩️ Remboursé'}
                               </span>
                             )}
                           </div>
@@ -273,7 +345,7 @@ const MyOrders = () => {
                             {formatDate(order.createdAt)}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
-                            {order.items?.length || 0} article(s)
+                            {order.items?.length || 0} article(s) • {order.deliveryMethod === 'EXPRESS' ? '⚡ Livraison Express' : order.deliveryMethod === 'PICKUP' ? '🏪 Point Relais' : '🚚 Livraison Standard'}
                           </p>
                         </div>
                       </div>
@@ -286,13 +358,22 @@ const MyOrders = () => {
                             {getStatusLabel(order.status)}
                           </span>
                         </div>
-                        <button
-                          onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
-                          className="p-2 text-gray-600 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors border"
-                          title="Voir les détails"
-                        >
-                          <Eye size={18} />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenInvoice(order.id)}
+                            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors border"
+                            title="Imprimer la facture"
+                          >
+                            <Printer size={17} />
+                          </button>
+                          <button
+                            onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                            className="p-2 text-gray-600 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors border"
+                            title="Voir les détails"
+                          >
+                            <Eye size={17} />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -378,6 +459,36 @@ const MyOrders = () => {
                           })}
                         </div>
 
+                        {/* Code secret de confirmation de livraison (Cahier des charges 4.7) */}
+                        {!order.isDigitalOnly && order.deliveryCode && order.status !== 'CANCELLED' && (
+                          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl p-3.5 my-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                            <div>
+                              <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs uppercase tracking-wider">
+                                <ShieldCheck size={16} className="text-amber-600" />
+                                Code secret de confirmation de livraison :
+                                <span className="font-mono text-sm font-extrabold text-amber-950 bg-white px-2.5 py-0.5 rounded border border-amber-300 tracking-wider">
+                                  {order.deliveryCode}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-amber-700 mt-1">
+                                {order.status === 'DELIVERED'
+                                  ? '✅ Ce code a été validé. La livraison a été confirmée.'
+                                  : '⚠️ Donnez ce code secret au livreur UNIQUEMENT après avoir vérifié et reçu votre colis.'}
+                              </p>
+                            </div>
+                            {order.status !== 'DELIVERED' && (
+                              <button
+                                onClick={() => handleConfirmDelivery(order.id, order.deliveryCode)}
+                                disabled={confirmingOrder === order.id}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm flex-shrink-0 disabled:opacity-50"
+                              >
+                                {confirmingOrder === order.id ? <Loader size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+                                Confirmer la réception
+                              </button>
+                            )}
+                          </div>
+                        )}
+
                         {/* Adresse & Paiement */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                           <div className="bg-white p-3 rounded-xl border border-gray-200">
@@ -387,9 +498,20 @@ const MyOrders = () => {
                             <p className="text-gray-600">{order.shippingAddress || 'Livraison numérique instantanée'}</p>
                             <p className="text-gray-600">{order.city}</p>
                             <p className="text-gray-600">{order.phone}</p>
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              Mode: {order.deliveryMethod === 'EXPRESS' ? '⚡ Express' : order.deliveryMethod === 'PICKUP' ? '🏪 Point Relais' : '🚚 Standard'}
+                            </p>
                           </div>
                           <div className="bg-white p-3 rounded-xl border border-gray-200">
-                            <p className="font-bold text-gray-700 mb-1">💳 Mode de paiement</p>
+                            <div className="flex justify-between items-start">
+                              <p className="font-bold text-gray-700 mb-1">💳 Mode de paiement</p>
+                              <button
+                                onClick={() => handleOpenInvoice(order.id)}
+                                className="text-[11px] font-bold text-orange-600 hover:text-orange-700 hover:underline flex items-center gap-1"
+                              >
+                                <Printer size={12} /> Facture PDF
+                              </button>
+                            </div>
                             <p className="text-gray-600 font-medium">
                               {order.paymentMethod === 'ikeepay' && '📱 Mobile Money (IKeepay)'}
                               {order.paymentMethod === 'momo' && '🟡 MTN Mobile Money'}
@@ -399,6 +521,11 @@ const MyOrders = () => {
                               {!order.paymentMethod && '📱 Mobile Money'}
                             </p>
                             <p className="text-gray-500 mt-1">Statut: <span className="font-semibold text-gray-800">{getStatusLabel(order.status)}</span></p>
+                            {order.escrowStatus && (
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                Séquestre : <span className="font-semibold text-amber-700">{order.escrowStatus === 'HELD' ? 'Fonds protégés' : order.escrowStatus === 'RELEASED' ? 'Fonds libérés' : 'Remboursé'}</span>
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -596,6 +723,103 @@ const MyOrders = () => {
                 className="flex-1 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {reviewLoading ? <Loader className="animate-spin" size={16} /> : 'Envoyer l\'avis'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Modal (Cahier des charges 4.6) */}
+      {invoiceModal && invoiceData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 animate-fade-in">
+            <div className="flex justify-between items-start border-b pb-4 mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">FACTURE D'ACHAT</h2>
+                <p className="text-xs text-orange-600 font-mono font-bold">{invoiceData.invoiceNumber}</p>
+                <p className="text-xs text-gray-400">Date : {new Date(invoiceData.date).toLocaleDateString('fr-FR')}</p>
+              </div>
+              <button onClick={() => setInvoiceModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Client & Vendeur */}
+            <div className="grid grid-cols-2 gap-4 text-xs mb-6 p-3 bg-gray-50 rounded-xl">
+              <div>
+                <p className="font-bold text-gray-700 mb-1">ACHETEUR</p>
+                <p className="font-semibold text-gray-900">{invoiceData.customer?.fullName || 'Client'}</p>
+                <p className="text-gray-600">{invoiceData.customer?.email}</p>
+                <p className="text-gray-600">{invoiceData.customer?.phone}</p>
+                <p className="text-gray-600">{invoiceData.shippingAddress}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-gray-700 mb-1">PLATEFORME</p>
+                <p className="font-semibold text-gray-900">{invoiceData.store?.name || 'Marketivo'}</p>
+                <p className="text-gray-600">{invoiceData.store?.email}</p>
+                <p className="text-gray-600">{invoiceData.store?.phone}</p>
+                <p className="text-gray-600 font-medium">Mode: {invoiceData.paymentMethod?.toUpperCase()}</p>
+              </div>
+            </div>
+
+            {/* Tableau des articles */}
+            <table className="w-full text-xs mb-6">
+              <thead>
+                <tr className="border-b text-gray-500 text-left">
+                  <th className="py-2">Description</th>
+                  <th className="py-2 text-center">Qté</th>
+                  <th className="py-2 text-right">Prix Unitaire</th>
+                  <th className="py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {invoiceData.items?.map((it, idx) => (
+                  <tr key={idx}>
+                    <td className="py-2 font-medium">{it.name}</td>
+                    <td className="py-2 text-center">{it.quantity}</td>
+                    <td className="py-2 text-right">{formatPrice(it.unitPrice)}</td>
+                    <td className="py-2 text-right font-bold">{formatPrice(it.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Totaux facture */}
+            <div className="border-t pt-3 space-y-1 text-xs text-right max-w-xs ml-auto mb-6">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sous-total :</span>
+                <span>{formatPrice(invoiceData.subtotal)}</span>
+              </div>
+              {invoiceData.discountAmount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Remise ({invoiceData.couponCode || 'Promo'}) :</span>
+                  <span>-{formatPrice(invoiceData.discountAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">Frais de livraison :</span>
+                <span>{formatPrice(invoiceData.shippingCost)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-sm text-gray-900 border-t pt-1">
+                <span>TOTAL RÉGLÉ :</span>
+                <span className="text-orange-600">{formatPrice(invoiceData.total)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+              >
+                <Printer size={14} /> Imprimer la Facture
+              </button>
+              <button
+                type="button"
+                onClick={() => setInvoiceModal(false)}
+                className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-gray-50 text-gray-700"
+              >
+                Fermer
               </button>
             </div>
           </div>

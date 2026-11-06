@@ -75,7 +75,14 @@ const Settings = () => {
     // Footer
     footerEmail: '',
     footerPhone: '',
-    footerAddress: ''
+    footerAddress: '',
+    // Marketplace & Cahier des charges 4.3 - 4.7
+    productModeration: false,
+    prohibitedProducts: '',
+    escrowHoldDays: 3,
+    serviceFeePercentage: 0,
+    serviceFeeFixed: 0,
+    deliveryZones: []
   });
 
   const location = useLocation();
@@ -421,6 +428,50 @@ const Settings = () => {
                     rows={3}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   />
+                </div>
+
+                {/* Modération des produits & Règles Marketplace (Cahier des charges 4.3) */}
+                <div className="md:col-span-2 border-t pt-5 space-y-4">
+                  <h3 className="font-bold text-base text-gray-800 flex items-center gap-2">
+                    <ShieldCheck className="text-orange-500" size={18} />
+                    Modération & Sécurité des Produits Marketplace
+                  </h3>
+
+                  {/* Toggle Modération préalable */}
+                  <div className="flex items-center justify-between p-4 border rounded-xl bg-orange-50/50">
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">Modération des produits avant publication</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Si activé, tout produit créé par un vendeur restera en attente d'approbation par l'administrateur avant d'apparaître sur la boutique publique.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4 flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={settings.productModeration || false}
+                        onChange={(e) => handleChange('productModeration', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-12 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                    </label>
+                  </div>
+
+                  {/* Liste des produits et activités interdits */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Liste des produits et activités strictement interdits
+                    </label>
+                    <textarea
+                      value={Array.isArray(settings.prohibitedProducts) ? settings.prohibitedProducts.join(', ') : (settings.prohibitedProducts || '')}
+                      onChange={(e) => handleChange('prohibitedProducts', e.target.value)}
+                      rows={3}
+                      placeholder="Ex: Armes, contrefaçons, drogues, produits financiers non régulés, contenu adulte..."
+                      className="w-full px-4 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-orange-500"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Séparez les catégories et mots-clés interdits par des virgules. Les vendeurs devront respecter ces règles lors de la publication.
+                    </p>
+                  </div>
                 </div>
 
               </div>
@@ -848,6 +899,30 @@ const Settings = () => {
                 </div>
               </div>
               )}
+
+              {/* Système de Séquestre (Escrow) - Cahier des charges 4.6 */}
+              <div className="border-t pt-6 space-y-4">
+                <h3 className="font-bold text-base text-gray-800 flex items-center gap-2">
+                  <ShieldCheck className="text-orange-500" size={18} />
+                  Système de Séquestre & Déblocage des Fonds (Escrow)
+                </h3>
+                <div className="p-4 border rounded-xl bg-blue-50/50 space-y-2">
+                  <label className="block text-sm font-medium text-gray-800">
+                    Délai de rétention en séquestre (en jours)
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.escrowHoldDays || 3}
+                    onChange={(e) => handleChange('escrowHoldDays', parseInt(e.target.value) || 0)}
+                    className="w-full sm:w-48 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
+                    min="0"
+                    max="30"
+                  />
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    L'argent est retenu en toute sécurité par la plateforme jusqu'à la livraison confirmée par le code secret (produits physiques) ou le téléchargement immédiat (produits digitaux), puis libéré au vendeur après ce délai.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -887,6 +962,34 @@ const Settings = () => {
                     </div>
                     <p className="font-medium">À la livraison</p>
                     <p className="text-xs text-gray-500">Cash on Delivery</p>
+                  </div>
+                </div>
+
+                {/* Frais de service plateforme (Cahier des charges 4.5) */}
+                <div className="border-t pt-4 mt-2">
+                  <h3 className="font-bold text-sm text-gray-800 mb-2">Frais de service plateforme (Acheteur)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Frais fixes par commande ({settings.currencySymbol})</label>
+                      <input
+                        type="number"
+                        value={settings.serviceFeeFixed || 0}
+                        onChange={(e) => handleChange('serviceFeeFixed', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Pourcentage de frais de service (%)</label>
+                      <input
+                        type="number"
+                        value={settings.serviceFeePercentage || 0}
+                        onChange={(e) => handleChange('serviceFeePercentage', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                        min="0"
+                        step="0.1"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

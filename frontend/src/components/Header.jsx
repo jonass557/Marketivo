@@ -1,6 +1,8 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, Menu, Search, X, ChevronDown, Heart, FileText, Package, Store, MessageCircle, Home } from 'lucide-react';
+import { ShoppingCart, User, Menu, Search, X, ChevronDown, Heart, FileText, Package, Store, MessageCircle, Home, Zap, Tag } from 'lucide-react';
+import axios from 'axios';
+import API_URL from '../config/api';
 import { useTranslation } from 'react-i18next';
 import AuthContext from '../context/AuthContext';
 import CartContext from '../context/CartContext';
@@ -9,17 +11,62 @@ import LanguageSwitcher from './LanguageSwitcher';
 
 const Header = () => {
   const { t } = useTranslation();
-  const { settings } = useSettings();
+  const { settings, formatPrice } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, logout } = useContext(AuthContext);
   const { cartCount } = useContext(CartContext);
   const navigate = useNavigate();
+  const searchContainerRef = useRef(null);
+
+  // Autocomplétion de recherche (Cahier des charges 4.4)
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await axios.get(`${API_URL}/api/products/search/suggestions?q=${encodeURIComponent(searchQuery.trim())}`);
+        setSuggestions(data.suggestions || []);
+        setShowSuggestions(true);
+      } catch (e) {
+        // Ignorer en mode silencieux
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fermer les suggestions au clic en dehors
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/shop?search=${searchQuery}`);
+      setShowSuggestions(false);
+      navigate(`/shop?search=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  const handleSelectSuggestion = (s) => {
+    setShowSuggestions(false);
+    setSearchQuery('');
+    if (s.type === 'product') {
+      navigate(`/product/${s.slug || s.id}`);
+    } else if (s.type === 'category') {
+      navigate(`/shop?category=${s.slug}`);
     }
   };
 
@@ -75,24 +122,89 @@ const Header = () => {
               )}
             </Link>
 
-            {/* Barre de recherche - Desktop */}
-            <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-2xl">
-              <div className="flex w-full">
+            {/* Barre de recherche avec autocomplétion - Desktop (Cahier des charges 4.4) */}
+            <div ref={searchContainerRef} className="hidden md:flex flex-1 max-w-2xl relative">
+              <form onSubmit={handleSearch} className="flex w-full">
                 <input
                   type="text"
-                  placeholder="Rechercher des produits, marques et catégories"
-                  className="w-full px-4 py-2 text-gray-800 rounded-l focus:outline-none"
+                  placeholder="Rechercher des produits, formations, ebooks, marques..."
+                  className="w-full px-4 py-2 text-gray-800 rounded-l focus:outline-none text-sm"
                   value={searchQuery}
+                  onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 <button
                   type="submit"
-                  className="bg-theme-primary-hover hover:opacity-90 px-6 py-2 rounded-r transition-colors"
+                  className="bg-theme-primary-hover hover:opacity-90 px-6 py-2 rounded-r transition-colors flex items-center justify-center"
                 >
                   <Search size={20} />
                 </button>
-              </div>
-            </form>
+              </form>
+
+              {/* Menu déroulant des suggestions autocomplétées */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white text-gray-900 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-fade-in max-h-96 overflow-y-auto">
+                  <div className="p-2 border-b bg-gray-50 flex items-center justify-between text-xs text-gray-500 font-semibold px-3">
+                    <span>Suggestions instantanées</span>
+                    <span>{suggestions.length} résultat(s)</span>
+                  </div>
+
+                  <div className="divide-y divide-gray-50">
+                    {suggestions.map((s, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectSuggestion(s)}
+                        className="p-3 hover:bg-orange-50 cursor-pointer transition-colors flex items-center gap-3"
+                      >
+                        {s.type === 'product' ? (
+                          <>
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 border flex items-center justify-center">
+                              {s.image ? (
+                                <img src={s.image} alt={s.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Package size={18} className="text-gray-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-semibold text-xs text-gray-900 truncate">{s.title}</p>
+                                {s.productType === 'DIGITAL' ? (
+                                  <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.2 rounded-full flex-shrink-0">
+                                    ⚡ Digital
+                                  </span>
+                                ) : (
+                                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.2 rounded-full flex-shrink-0">
+                                    📦 Physique
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-400">{s.categoryName || 'Boutique'}</p>
+                            </div>
+                            <span className="font-bold text-xs text-orange-600 flex-shrink-0">
+                              {formatPrice(s.price)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="p-1.5 bg-gray-100 text-gray-600 rounded-lg"><Tag size={14} /></span>
+                            <span className="text-xs font-semibold text-gray-800 flex-1">Catégorie : <strong>{s.title}</strong></span>
+                            <span className="text-[11px] text-gray-400">Voir tout →</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSearch}
+                    className="w-full text-center py-2.5 bg-gray-50 hover:bg-gray-100 text-xs font-bold text-orange-600 border-t transition-colors"
+                  >
+                    Voir tous les résultats pour "{searchQuery}" →
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Actions utilisateur */}
             <div className="flex items-center gap-1 sm:gap-2 ml-auto">

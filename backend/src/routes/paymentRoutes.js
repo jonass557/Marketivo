@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/auth');
+const { protect, optionalProtect } = require('../middleware/auth');
 const {
   // Stripe
   createStripePaymentIntent,
@@ -39,9 +39,9 @@ router.post('/cinetpay/initialize', protect, initializeCinetPayPayment);
 router.post('/cinetpay/notify', cinetPayNotify); // Webhook public
 router.post('/cinetpay/check', protect, checkCinetPayStatus);
 
-// iKeepay routes
-router.post('/ikeepay/payin', protect, initiateIkeepayPayment);
-router.get('/ikeepay/verify/:reference', protect, verifyIkeepayPayment);
+// iKeepay routes (supporte les utilisateurs connectés et les invités)
+router.post('/ikeepay/payin', optionalProtect, initiateIkeepayPayment);
+router.get('/ikeepay/verify/:reference', optionalProtect, verifyIkeepayPayment);
 router.post('/ikeepay/webhook', ikeepayWebhook); // Webhook public
 router.post('/ikeepay/payout', protect, initiateIkeepayPayout);
 

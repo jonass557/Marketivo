@@ -37,8 +37,35 @@ const protect = async (req, res, next) => {
   return res.status(401).json({ message: 'Non autorisé, pas de token' });
 };
 
+// Middleware d'authentification optionnelle (pour commande invité ou panier)
+const optionalProtect = async (req, res, next) => {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('email role fullName vendor');
+      if (user) {
+        req.user = {
+          _id: user._id,
+          id: user._id,
+          email: user.email,
+          role: user.role,
+          fullName: user.fullName,
+          vendor: user.vendor || null
+        };
+      }
+    } catch (error) {
+      // Ignorer l'erreur pour laisser passer en invité
+      req.user = null;
+    }
+  }
+  return next();
+};
+
 const admin = (req, res, next) => {
-  // Accepte ADMIN et SUPER_ADMIN (pour compatibilité avec les anciennes données)
   if (req.user && (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN')) {
     next();
   } else {
@@ -62,4 +89,4 @@ const vendorOrAdmin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, admin, vendor, vendorOrAdmin };
+module.exports = { protect, optionalProtect, admin, vendor, vendorOrAdmin };
