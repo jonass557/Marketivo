@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Package, ChevronRight, Calendar, Clock, CheckCircle, Truck, XCircle,
   Eye, Star, X, Loader, Download, ExternalLink, Zap, FileText, Sparkles, AlertCircle,
-  Printer, ShieldCheck, Check
+  Printer, ShieldCheck, Check, Plane
 } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
@@ -527,6 +527,16 @@ const MyOrders = () => {
                               </p>
                             )}
                           </div>
+                        </div>
+
+                        {/* Dossier de transit international */}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Link
+                            to="/my-shipments"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold border border-blue-200 transition"
+                          >
+                            <Plane size={13} /> Suivre les dossiers de transit international (Chine ➔ Cameroun)
+                          </Link>
                         </div>
 
                         {/* Avis si commande livrée */}

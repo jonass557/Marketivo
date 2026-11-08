@@ -18,16 +18,26 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['USER', 'VENDOR', 'ADMIN', 'SUPER_ADMIN'],
+    enum: ['USER', 'VENDOR', 'FORWARDER', 'DELIVERY_AGENT', 'ADMIN', 'SUPER_ADMIN'],
     default: 'USER'
   },
   address: String,
   phone: String,
   avatar: String,
+  // Pays de résidence (Section 15 International)
+  country: {
+    type: String,
+    default: 'Cameroun'
+  },
   // Référence vers le profil vendeur (si role === VENDOR)
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vendor'
+  },
+  // Référence vers le profil transitaire (si role === FORWARDER - Section 16)
+  forwarder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Forwarder'
   },
   // Favoris
   wishlist: [{

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   Filter, Grid, List, ChevronDown, X, Loader, ChevronLeft, ChevronRight,
-  ArrowLeft, Star, MapPin, Check, Zap, Box, BookOpen, Video, Calendar, Key
+  ArrowLeft, Star, MapPin, Check, Zap, Box, BookOpen, Video, Calendar, Key, Plane
 } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
@@ -117,6 +117,7 @@ const Shop = () => {
     else if (selectedType === 'COURSE') matchesType = isDigital && digitalKind === 'COURSE';
     else if (selectedType === 'COACHING') matchesType = isDigital && digitalKind === 'COACHING';
     else if (selectedType === 'EXTERNAL') matchesType = isDigital && digitalKind === 'EXTERNAL';
+    else if (selectedType === 'INTERNATIONAL') matchesType = (!isDigital && product.originCountry && product.originCountry !== 'Cameroun') || product.requiresForwarder;
 
     // Filtre ville
     const matchesCity = !selectedCity || selectedCity === 'Toutes' ||
@@ -205,6 +206,7 @@ const Shop = () => {
             { id: 'ALL', label: 'Tous les produits', icon: null },
             { id: 'DIGITAL', label: '⚡ Produits Digitaux', icon: Zap },
             { id: 'PHYSICAL', label: '📦 Produits Physiques', icon: Box },
+            { id: 'INTERNATIONAL', label: '✈️ Import Chine & Fret', icon: Plane },
             { id: 'COURSE', label: '🎓 Formations en ligne', icon: Video },
             { id: 'COACHING', label: '📅 Coaching & Consultations', icon: Calendar },
             { id: 'EXTERNAL', label: '🔑 Licences & Logiciels', icon: Key }

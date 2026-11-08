@@ -95,6 +95,37 @@ const productSchema = new mongoose.Schema({
     width: { type: Number, default: 0 },
     height: { type: Number, default: 0 }
   },
+  // Extension internationale & Transitaire (Sections 15.4 & 16)
+  volumetricWeight: {
+    type: Number,
+    default: 0 // (L x W x H en cm) / 5000
+  },
+  originCountry: {
+    type: String,
+    default: 'Cameroun'
+  },
+  requiresForwarder: {
+    type: Boolean,
+    default: false
+  },
+  originalCurrency: {
+    type: String,
+    default: 'XAF',
+    uppercase: true
+  },
+  originalPrice: {
+    type: Number,
+    default: null
+  },
+  customsDeclarationMode: {
+    type: String,
+    enum: ['DDP', 'DAP'],
+    default: 'DAP'
+  },
+  customsTariffEstimate: {
+    type: Number,
+    default: 0
+  },
   variants: [variantSchema],
 
   // 2. Spécifique Produit Digital Téléchargeable

@@ -31,6 +31,11 @@ import VendorShop from './pages/VendorShop';
 import VendorsList from './pages/VendorsList';
 import Messages from './pages/Messages';
 import Pricing from './pages/Pricing';
+import ForwardersList from './pages/ForwardersList';
+import ForwarderDetail from './pages/ForwarderDetail';
+import ForwarderRegister from './pages/ForwarderRegister';
+import ShipmentDetail from './pages/ShipmentDetail';
+import MyShipments from './pages/MyShipments';
 
 // Vendor Dashboard Pages
 import VendorLayout from './pages/vendor/VendorLayout';
@@ -106,6 +111,13 @@ function App() {
                     <Route path="/shop/:slug" element={<PublicLayout><VendorShop /></PublicLayout>} />
                     <Route path="/boutique/:slug" element={<PublicLayout><VendorShop /></PublicLayout>} />
                     <Route path="/messages" element={<PublicLayout><Messages /></PublicLayout>} />
+                    
+                    {/* Transit & Fret International (Section 16) */}
+                    <Route path="/forwarders" element={<PublicLayout><ForwardersList /></PublicLayout>} />
+                    <Route path="/forwarders/:id" element={<PublicLayout><ForwarderDetail /></PublicLayout>} />
+                    <Route path="/forwarder/register" element={<PublicLayout><ForwarderRegister /></PublicLayout>} />
+                    <Route path="/shipments/:id" element={<PublicLayout><ShipmentDetail /></PublicLayout>} />
+                    <Route path="/my-shipments" element={<PublicLayout><MyShipments /></PublicLayout>} />
 
                     {/* Vendor Dashboard Routes */}
                     <Route path="/vendor/dashboard" element={<VendorLayout />}>

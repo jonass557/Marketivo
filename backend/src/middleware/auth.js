@@ -12,7 +12,7 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      const user = await User.findById(decoded.id).select('email role fullName vendor');
+      const user = await User.findById(decoded.id).select('email role fullName vendor forwarder');
 
       if (!user) {
         return res.status(401).json({ message: 'Utilisateur non trouvé' });
@@ -24,7 +24,8 @@ const protect = async (req, res, next) => {
         email: user.email,
         role: user.role,
         fullName: user.fullName,
-        vendor: user.vendor || null
+        vendor: user.vendor || null,
+        forwarder: user.forwarder || null
       };
 
       return next();
@@ -46,7 +47,7 @@ const optionalProtect = async (req, res, next) => {
     try {
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select('email role fullName vendor');
+      const user = await User.findById(decoded.id).select('email role fullName vendor forwarder');
       if (user) {
         req.user = {
           _id: user._id,
@@ -54,7 +55,8 @@ const optionalProtect = async (req, res, next) => {
           email: user.email,
           role: user.role,
           fullName: user.fullName,
-          vendor: user.vendor || null
+          vendor: user.vendor || null,
+          forwarder: user.forwarder || null
         };
       }
     } catch (error) {
@@ -81,6 +83,14 @@ const vendor = (req, res, next) => {
   }
 };
 
+const forwarder = (req, res, next) => {
+  if (req.user && (req.user.role === 'FORWARDER' || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Accès transitaire requis' });
+  }
+};
+
 const vendorOrAdmin = (req, res, next) => {
   if (req.user && (req.user.role === 'VENDOR' || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN')) {
     next();
@@ -89,4 +99,4 @@ const vendorOrAdmin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, optionalProtect, admin, vendor, vendorOrAdmin };
+module.exports = { protect, optionalProtect, admin, vendor, forwarder, vendorOrAdmin };

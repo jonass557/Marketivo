@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw, Zap, Download, Tag, Check, ShieldCheck, Printer, FileText } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, CreditCard, Truck, CheckCircle, ArrowLeft, MessageCircle, Loader, ExternalLink, Star, X, Smartphone, AlertCircle, RefreshCw, Zap, Download, Tag, Check, ShieldCheck, Printer, FileText, Plane, Ship } from 'lucide-react';
 import CartContext from '../context/CartContext';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -56,6 +56,20 @@ const Checkout = () => {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewedProducts, setReviewedProducts] = useState([]);
   const [orderedProducts, setOrderedProducts] = useState([]);
+
+  // Extension internationale & Transitaires (Section 15 & 16)
+  const [forwardersList, setForwardersList] = useState([]);
+  const [selectedForwarderId, setSelectedForwarderId] = useState('');
+  const [isExternalForwarder, setIsExternalForwarder] = useState(false);
+  const [externalForwarderDetails, setExternalForwarderDetails] = useState({
+    companyName: '',
+    contactName: '',
+    phone: '',
+    warehouseAddress: '',
+    instructions: ''
+  });
+  const [forwarderTransportMode, setForwarderTransportMode] = useState('AIR_FREIGHT');
+  const [createdShipmentId, setCreatedShipmentId] = useState(null);
   
   // Charger les données sauvegardées depuis localStorage
   const getSavedFormData = () => {
@@ -85,6 +99,10 @@ const Checkout = () => {
   // Hybride Chariow + Jumia : détection des produits digitaux
   const isDigitalOnly = cartItems.length > 0 && cartItems.every(item => item.productType === 'DIGITAL');
   const hasDigitalItems = cartItems.some(item => item.productType === 'DIGITAL');
+  const hasInternationalItems = cartItems.some(item => 
+    (item.originCountry && item.originCountry !== 'Cameroun') || 
+    item.requiresForwarder
+  );
 
   // Charger le coupon sauvegardé depuis localStorage
   useEffect(() => {
@@ -168,10 +186,23 @@ const Checkout = () => {
     localStorage.setItem('checkoutFormData', JSON.stringify(formData));
   }, [formData]);
 
-  // Charger les moyens de paiement disponibles
+  // Charger les moyens de paiement et transitaires disponibles
   useEffect(() => {
     fetchPaymentMethods();
+    fetchForwardersList();
   }, []);
+
+  const fetchForwardersList = async () => {
+    try {
+      const { data } = await axios.get(`${API_URL}/api/forwarders`);
+      setForwardersList(data || []);
+      if (data && data.length > 0 && !selectedForwarderId) {
+        setSelectedForwarderId(data[0]._id);
+      }
+    } catch (error) {
+      console.error('Erreur chargement transitaires:', error);
+    }
+  };
 
   const fetchPaymentMethods = async () => {
     try {
@@ -263,6 +294,31 @@ const Checkout = () => {
 
       const orderId = data.order?.id;
       setCreatedOrderId(orderId);
+
+      // Création automatique du dossier d'expédition tripartite si la commande contient des articles internationaux (Section 16.3)
+      if (hasInternationalItems && user) {
+        try {
+          const { data: shpData } = await axios.post(`${API_URL}/api/shipments`, {
+            orderId,
+            forwarderId: !isExternalForwarder ? selectedForwarderId : undefined,
+            isExternalForwarder: isExternalForwarder,
+            externalForwarderDetails: isExternalForwarder ? externalForwarderDetails : undefined,
+            transportMode: forwarderTransportMode,
+            destinationAddress: {
+              fullName: formData.fullName,
+              phone: formData.phone,
+              city: formData.city,
+              street: formData.address,
+              notes: formData.notes
+            }
+          }, config);
+          if (shpData?.shipment?._id) {
+            setCreatedShipmentId(shpData.shipment._id);
+          }
+        } catch (shpErr) {
+          console.error("Erreur création dossier d'expédition:", shpErr);
+        }
+      }
 
       // Sauvegarder les produits commandés pour les avis
       setOrderedProducts(cartItems.map(item => ({ id: item.id, name: item.name, image: item.images?.[0] || item.image, productType: item.productType, digitalFileUrl: item.digitalFileUrl, digitalAccessLink: item.digitalAccessLink })));
@@ -656,6 +712,27 @@ const Checkout = () => {
                 <Link to="/orders" className="block text-center text-xs font-bold text-purple-700 hover:underline pt-1">
                   Accéder à ma Bibliothèque Digitale complète →
                 </Link>
+              </div>
+            )}
+
+            {/* Suivi du Dossier d'Expédition Fret International (Section 16.4) */}
+            {hasInternationalItems && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-6 text-left space-y-2 shadow-sm">
+                <div className="flex items-center gap-2 text-blue-900 font-bold text-sm">
+                  <Plane size={18} className="text-blue-600" />
+                  Dossier d'expédition international ouvert
+                </div>
+                <p className="text-xs text-blue-700">
+                  Votre colis sera acheminé à l'entrepôt international avec un code de marquage unique. Suivez la réception, visualisez les photos d'inspection et communiquez avec le transitaire et le vendeur :
+                </p>
+                <div className="pt-1">
+                  <Link
+                    to={createdShipmentId ? `/shipments/${createdShipmentId}` : '/my-shipments'}
+                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                  >
+                    <Plane size={14} /> Suivre le transit en direct (Pesée & Photos) →
+                  </Link>
+                </div>
               </div>
             )}
             
@@ -1111,6 +1188,133 @@ const Checkout = () => {
                       <p className="text-xs text-gray-500 mt-1">En boutique partenaire</p>
                       <p className="text-xs font-bold text-green-600 mt-2">0 FCFA (Gratuit)</p>
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Acheminement International & Transitaire Partenaire (Section 16.3) */}
+              {hasInternationalItems && (
+                <div className="bg-gradient-to-br from-blue-50/70 to-indigo-50/70 border-2 border-blue-200 rounded-xl shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Plane className="text-blue-600" size={20} />
+                      Acheminement International & Transitaire
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                      Chine ➔ Cameroun
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                    Votre commande contient des articles internationaux. Choisissez le mode d'acheminement et le transitaire partenaire qui prendra en charge la réception à l'entrepôt en Chine (Guangzhou / Yiwu) et le dédouanement.
+                  </p>
+
+                  {/* Mode de transport international */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setForwarderTransportMode('AIR_FREIGHT')}
+                      className={`p-3 rounded-xl border-2 text-left transition ${
+                        forwarderTransportMode === 'AIR_FREIGHT'
+                          ? 'border-blue-600 bg-white shadow-sm'
+                          : 'border-gray-200 bg-white/60 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-1.5 font-bold text-xs text-gray-900">
+                        <Plane className="w-4 h-4 text-blue-600" />
+                        <span>Fret Aérien (7 - 12 jours)</span>
+                      </div>
+                      <span className="text-[11px] text-gray-500 mt-1 block">~8 500 FCFA / kg • Idéal colis légers</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForwarderTransportMode('SEA_FREIGHT')}
+                      className={`p-3 rounded-xl border-2 text-left transition ${
+                        forwarderTransportMode === 'SEA_FREIGHT'
+                          ? 'border-blue-600 bg-white shadow-sm'
+                          : 'border-gray-200 bg-white/60 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-1.5 font-bold text-xs text-gray-900">
+                        <Ship className="w-4 h-4 text-emerald-600" />
+                        <span>Fret Maritime (35 - 50 jours)</span>
+                      </div>
+                      <span className="text-[11px] text-gray-500 mt-1 block">~380 000 FCFA / m³ • Idéal volumes</span>
+                    </button>
+                  </div>
+
+                  {/* Choix Transitaire Partenaire ou Externe */}
+                  <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-100">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800">
+                      <input
+                        type="radio"
+                        name="transitaireChoice"
+                        checked={!isExternalForwarder}
+                        onChange={() => setIsExternalForwarder(false)}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Transitaire Partenaire Agréé Marketivo (Recommandé - Séquestre inclus)</span>
+                    </label>
+
+                    {!isExternalForwarder && (
+                      <div className="pl-6 pt-1">
+                        {forwardersList.length === 0 ? (
+                          <p className="text-xs text-gray-400">Recherche des transitaires disponibles...</p>
+                        ) : (
+                          <select
+                            value={selectedForwarderId}
+                            onChange={(e) => setSelectedForwarderId(e.target.value)}
+                            className="w-full py-2 px-3 border border-gray-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            {forwardersList.map(fwd => (
+                              <option key={fwd._id} value={fwd._id}>
+                                {fwd.companyName} • {fwd.warehouses?.[0]?.city || 'Guangzhou'} (★ {fwd.rating?.toFixed(1) || '4.9'})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <p className="text-[11px] text-blue-700 mt-1.5">
+                          ✓ Vos frais de transit ne sont débloqués qu'après vérification du colis avec votre code secret de remise.
+                        </p>
+                      </div>
+                    )}
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800 pt-2 border-t border-gray-100">
+                      <input
+                        type="radio"
+                        name="transitaireChoice"
+                        checked={isExternalForwarder}
+                        onChange={() => setIsExternalForwarder(true)}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>J'ai mon propre transitaire en Chine (Transitaire Externe)</span>
+                    </label>
+
+                    {isExternalForwarder && (
+                      <div className="pl-6 pt-2 space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Nom de votre transitaire en Chine"
+                          value={externalForwarderDetails.companyName}
+                          onChange={(e) => setExternalForwarderDetails(prev => ({ ...prev, companyName: e.target.value }))}
+                          className="w-full py-1.5 px-3 border border-gray-300 rounded-lg text-xs"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Adresse de son entrepôt en Chine (Guangzhou / Yiwu)"
+                          value={externalForwarderDetails.warehouseAddress}
+                          onChange={(e) => setExternalForwarderDetails(prev => ({ ...prev, warehouseAddress: e.target.value }))}
+                          className="w-full py-1.5 px-3 border border-gray-300 rounded-lg text-xs"
+                        />
+                        <input
+                          type="tel"
+                          placeholder="Téléphone / WhatsApp du contact en Chine"
+                          value={externalForwarderDetails.phone}
+                          onChange={(e) => setExternalForwarderDetails(prev => ({ ...prev, phone: e.target.value }))}
+                          className="w-full py-1.5 px-3 border border-gray-300 rounded-lg text-xs"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

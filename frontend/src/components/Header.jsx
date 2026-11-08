@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, Menu, Search, X, ChevronDown, Heart, FileText, Package, Store, MessageCircle, Home, Zap, Tag } from 'lucide-react';
+import { ShoppingCart, User, Menu, Search, X, ChevronDown, Heart, FileText, Package, Store, MessageCircle, Home, Zap, Tag, Plane } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
 import { useTranslation } from 'react-i18next';
@@ -92,6 +92,8 @@ const Header = () => {
             <Link to="/pricing" className="hidden xs:inline hover:text-orange-400">Vendez sur MyShop</Link>
             <span className="hidden md:inline">|</span>
             <Link to="/vendors" className="hidden md:inline hover:text-orange-400 flex items-center gap-1"><Store size={12} /> Boutiques</Link>
+            <span className="hidden md:inline">|</span>
+            <Link to="/forwarders" className="hidden md:inline hover:text-orange-400 flex items-center gap-1"><Plane size={12} /> Fret & Transit</Link>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link to="/blog" className="flex items-center gap-1 hover:text-orange-400">
@@ -228,6 +230,7 @@ const Header = () => {
                       <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100">Mon compte</Link>
                       <Link to="/orders" className="block px-4 py-2 hover:bg-gray-100">Mes commandes</Link>
                       <Link to="/orders" className="block px-4 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-xs">⚡ Bibliothèque Digitale</Link>
+                      <Link to="/my-shipments" className="block px-4 py-2 hover:bg-blue-50 text-blue-700 font-semibold text-xs">✈️ Mes Dossiers Transit</Link>
                       <Link to="/messages" className="block px-4 py-2 hover:bg-gray-100">Messages</Link>
                       {user.role === 'VENDOR' && (
                         <Link to="/vendor/dashboard" className="block px-4 py-2 hover:bg-gray-100 text-blue-600">Ma Boutique</Link>

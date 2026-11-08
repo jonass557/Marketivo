@@ -42,6 +42,36 @@ const vendorSchema = new mongoose.Schema({
     type: String,
     default: 'Cameroun'
   },
+  // Extension internationale (Cahier des charges Section 15.1)
+  isInternational: {
+    type: Boolean,
+    default: false
+  },
+  originCountry: {
+    type: String,
+    default: 'Cameroun'
+  },
+  shippingCountries: [{
+    type: String,
+    default: ['Cameroun']
+  }],
+  preferredCurrency: {
+    type: String,
+    default: 'XAF',
+    uppercase: true
+  },
+  payoutMethod: {
+    type: String,
+    enum: ['MOBILE_MONEY', 'BANK_TRANSFER', 'WISE', 'PAYONEER'],
+    default: 'MOBILE_MONEY'
+  },
+  warehouseAddress: {
+    address: { type: String, default: '' },
+    city: { type: String, default: '' },
+    country: { type: String, default: '' },
+    postalCode: { type: String, default: '' },
+    contactPhone: { type: String, default: '' }
+  },
   // Personnalisation boutique (Modèle Chariow)
   accentColor: {
     type: String,

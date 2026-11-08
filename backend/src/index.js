@@ -37,6 +37,8 @@ const chatRoutes = require('./routes/chatRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const couponRoutes = require('./routes/couponRoutes');
 const downloadRoutes = require('./routes/downloadRoutes');
+const forwarderRoutes = require('./routes/forwarderRoutes');
+const shipmentRoutes = require('./routes/shipmentRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -96,6 +98,20 @@ io.on('connection', (socket) => {
   socket.on('joinConversation', (conversationId) => {
     if (conversationId) {
       socket.join(`chat_${conversationId}`);
+    }
+  });
+
+  // Transit: Rejoindre la room tripartite d'un dossier d'expédition
+  socket.on('joinShipment', (shipmentId) => {
+    if (shipmentId) {
+      socket.join(`shipment_${shipmentId}`);
+    }
+  });
+
+  // Transit: Quitter la room d'un dossier d'expédition
+  socket.on('leaveShipment', (shipmentId) => {
+    if (shipmentId) {
+      socket.leave(`shipment_${shipmentId}`);
     }
   });
 
@@ -225,6 +241,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/partners', partnerRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/downloads', downloadRoutes);
+app.use('/api/forwarders', forwarderRoutes);
+app.use('/api/shipments', shipmentRoutes);
 
 app.get('/', (req, res) => {
   res.send('API MyShop Marketplace est en ligne');

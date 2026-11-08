@@ -4,7 +4,7 @@ import {
   Star, Heart, ShoppingCart, Truck, Shield, RotateCcw, Minus, Plus,
   ChevronRight, Share2, MessageCircle, Facebook, Copy, Check, Loader,
   User, ExternalLink, ArrowLeft, Zap, Download, FileText, Play, Video,
-  BookOpen, Calendar, Clock, MapPin, Tag, ChevronDown, ChevronUp, X
+  BookOpen, Calendar, Clock, MapPin, Tag, ChevronDown, ChevronUp, X, Plane, Globe
 } from 'lucide-react';
 import axios from 'axios';
 import API_URL from '../config/api';
@@ -384,6 +384,35 @@ const ProductDetail = () => {
                 </div>
               )}
 
+              {/* BANNIÈRE JUMIA / INTERNATIONALE : TRANSIT CHINE -> AFRIQUE (Section 15 & 16) */}
+              {!isDigital && (product.originCountry && product.originCountry !== 'Cameroun' || product.requiresForwarder) && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 text-xs text-blue-950 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-blue-900">
+                      <Plane size={16} className="text-blue-600" />
+                      <span>ARTICLE INTERNATIONAL (Expédié depuis {product.originCountry || 'la Chine'})</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-200 text-blue-900">
+                      {product.customsDeclarationMode || 'DDP Inclus'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Acheminement pris en charge par notre réseau de <strong>transitaires partenaires agréés</strong>. Pesée certifiée et photos haute définition prises à l'entrepôt international avant expédition.
+                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-blue-700">
+                      Fret Aérien (7-12 j) • Fret Maritime (35-50 j)
+                    </span>
+                    <Link
+                      to="/forwarders"
+                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline"
+                    >
+                      Voir les transitaires →
+                    </Link>
+                  </div>
+                </div>
+              )}
+
               {/* VARIANTES DU PRODUIT PHYSIQUE (Tailles, Couleurs - Cahier des charges 4.3) */}
               {!isDigital && product.variants && product.variants.length > 0 && (
                 <div className="space-y-3 pt-2">
@@ -566,13 +595,15 @@ const ProductDetail = () => {
               </div>
             )}
 
-            {/* Spécifications physiques (Poids, dimensions, SKU) */}
-            {!isDigital && (product.weight > 0 || product.dimensions?.length > 0 || product.sku) && (
+            {/* Spécifications physiques (Poids, dimensions, SKU, Poids volumétrique) */}
+            {!isDigital && (product.weight > 0 || product.dimensions?.length > 0 || product.sku || product.originCountry) && (
               <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm text-xs space-y-2">
-                <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Caractéristiques techniques</h4>
+                <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Caractéristiques techniques & Logistique</h4>
                 <div className="grid grid-cols-2 gap-2 text-gray-600">
                   {product.sku && <div><span className="text-gray-400">SKU :</span> {product.sku}</div>}
-                  {product.weight > 0 && <div><span className="text-gray-400">Poids :</span> {product.weight} kg</div>}
+                  {product.weight > 0 && <div><span className="text-gray-400">Poids réel :</span> {product.weight} kg</div>}
+                  {product.volumetricWeight > 0 && <div><span className="text-gray-400">Poids volumétrique :</span> {product.volumetricWeight} kg</div>}
+                  {product.originCountry && <div><span className="text-gray-400">Origine expédition :</span> {product.originCountry}</div>}
                   {product.dimensions?.length > 0 && (
                     <div className="col-span-2">
                       <span className="text-gray-400">Dimensions :</span> {product.dimensions.length} x {product.dimensions.width} x {product.dimensions.height} cm

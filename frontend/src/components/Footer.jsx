@@ -40,6 +40,8 @@ const Footer = () => {
             <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
               <li><Link to="/about" className="hover:text-theme-primary transition-colors">À propos de nous</Link></li>
               <li><Link to="/shop" className="hover:text-theme-primary transition-colors">Boutique</Link></li>
+              <li><Link to="/forwarders" className="hover:text-theme-primary transition-colors">Transitaires & Fret Chine</Link></li>
+              <li><Link to="/forwarder/register" className="hover:text-theme-primary transition-colors">Devenir Transitaire Partenaire</Link></li>
               <li><Link to="/contact" className="hover:text-theme-primary transition-colors">Contactez-nous</Link></li>
               <li><Link to="/faq" className="hover:text-theme-primary transition-colors">FAQ</Link></li>
               <li><Link to="/terms" className="hover:text-theme-primary transition-colors">Conditions générales</Link></li>
@@ -55,6 +57,7 @@ const Footer = () => {
               <li><Link to="/register" className="hover:text-theme-primary transition-colors">Créer un compte</Link></li>
               <li><Link to="/cart" className="hover:text-theme-primary transition-colors">Mon panier</Link></li>
               <li><Link to="/orders" className="hover:text-theme-primary transition-colors">Mes commandes</Link></li>
+              <li><Link to="/my-shipments" className="hover:text-theme-primary transition-colors">Mes dossiers de transit</Link></li>
               <li><Link to="/wishlist" className="hover:text-theme-primary transition-colors">Mes favoris</Link></li>
               <li><Link to="/profile" className="hover:text-theme-primary transition-colors">Mon profil</Link></li>
             </ul>

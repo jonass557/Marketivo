@@ -18,6 +18,8 @@ const Withdrawal = require('./Withdrawal');
 const Dispute = require('./Dispute');
 const SupportTicket = require('./SupportTicket');
 const ActivityLog = require('./ActivityLog');
+const Forwarder = require('./Forwarder');
+const ShipmentFolder = require('./ShipmentFolder');
 
 module.exports = {
   User,
@@ -39,5 +41,7 @@ module.exports = {
   Withdrawal,
   Dispute,
   SupportTicket,
-  ActivityLog
+  ActivityLog,
+  Forwarder,
+  ShipmentFolder
 };

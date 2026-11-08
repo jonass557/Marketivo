@@ -91,6 +91,33 @@ const settingsSchema = new mongoose.Schema({
   enableIkeepay: { type: Boolean, default: true },
   ikeepaySecretKey: String,
 
+  // Extension internationale (Cahier des charges Section 15)
+  internationalEnabled: { type: Boolean, default: true },
+  allowedOriginCountries: {
+    type: [String],
+    default: ['Cameroun', 'Chine', 'Nigeria', 'Côte d\'Ivoire', 'France', 'Turquie', 'Émirats Arabes Unis', 'USA', 'Ghana', 'Sénégal']
+  },
+  restrictedCountries: {
+    type: [String],
+    default: []
+  },
+  // Taux de change (par rapport à 1 unité de devise vers XAF)
+  exchangeRates: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {
+      XAF: 1,
+      XOF: 1,
+      CNY: 85.5,   // 1 Yuan ≈ 85.5 FCFA
+      NGN: 0.42,   // 1 Naira ≈ 0.42 FCFA
+      USD: 618.0,  // 1 USD ≈ 618 FCFA
+      EUR: 655.957 // 1 EUR = 655.957 FCFA
+    }
+  },
+
+  // Module Transitaires (Cahier des charges Section 16)
+  forwarderCommissionPercentage: { type: Number, default: 5 }, // 5% commission plateforme sur le transit
+  forwardersEnabled: { type: Boolean, default: true },
+
   // SEO
   metaTitle: String,
   metaDescription: String,
