@@ -14,6 +14,10 @@ const UserSubscription = require('./UserSubscription');
 const Conversation = require('./Conversation');
 const Message = require('./Message');
 const Coupon = require('./Coupon');
+const Withdrawal = require('./Withdrawal');
+const Dispute = require('./Dispute');
+const SupportTicket = require('./SupportTicket');
+const ActivityLog = require('./ActivityLog');
 
 module.exports = {
   User,
@@ -31,5 +35,9 @@ module.exports = {
   UserSubscription,
   Conversation,
   Message,
-  Coupon
+  Coupon,
+  Withdrawal,
+  Dispute,
+  SupportTicket,
+  ActivityLog
 };
